@@ -1,0 +1,111 @@
+name: Update Homebrew Tap
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags like v0.0.1, v0.0.2, etc.
+
+jobs:
+  update-tap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Remove 'v' prefix from tag to get version number
+          VERSION=${GITHUB_REF#refs/tags/v}
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+          echo "🏷️  Tag: $TAG"
+
+      - name: Calculate SHA256 and create tarball URL
+        id: release
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Construct tarball URL (from source repo: rezkam/allyas)
+          TARBALL_URL="https://github.com/rezkam/allyas/archive/refs/tags/$TAG.tar.gz"
+          echo "tarball_url=$TARBALL_URL" >> $GITHUB_OUTPUT
+          echo "🔗 Tarball URL: $TARBALL_URL"
+
+          # Download and calculate SHA256
+          SHA256=$(curl -sL "$TARBALL_URL" | shasum -a 256 | awk '{print $1}')
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "🔐 SHA256: $SHA256"
+
+      - name: Generate formula from template
+        run: |
+          TEMPLATE_FILE="support/formula-template.rb"
+          OUTPUT_FILE="allyas.rb"
+
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256="${{ steps.release.outputs.sha256 }}"
+          TARBALL_URL="${{ steps.release.outputs.tarball_url }}"
+
+          echo "📝 Generating formula from template..."
+
+          # Replace Handlebars-style placeholders
+          sed -e "s|{{version}}|$VERSION|g" \
+              -e "s|{{sha256}}|$SHA256|g" \
+              -e "s|{{tarballUrl}}|$TARBALL_URL|g" \
+              "$TEMPLATE_FILE" > "$OUTPUT_FILE"
+
+          echo "✅ Formula generated:"
+          cat "$OUTPUT_FILE"
+
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: rezkam/homebrew-allyas
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: tap-repo
+
+      - name: Update formula in tap repository
+        run: |
+          # Copy generated formula to tap repo
+          mkdir -p tap-repo/Formula
+          cp allyas.rb tap-repo/Formula/allyas.rb
+
+          echo "📂 Formula copied to tap repository"
+
+      - name: Commit and push to tap repository
+        working-directory: tap-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Formula/allyas.rb
+
+          if git diff --staged --quiet; then
+            echo "ℹ️  No changes to commit"
+          else
+            git commit -m "Update formula to version ${{ steps.version.outputs.version }}
+
+Auto-generated from rezkam/allyas@${{ steps.version.outputs.tag }}"
+            git push
+            echo "✅ Formula pushed to homebrew-allyas repository"
+          fi
+
+      - name: Create release summary
+        run: |
+          echo "## 🎉 Release ${{ steps.version.outputs.tag }} published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**SHA256:** \`${{ steps.release.outputs.sha256 }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Tarball:** [${{ steps.version.outputs.tag }}](${{ steps.release.outputs.tarball_url }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Installation" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "brew tap rezkam/allyas" >> $GITHUB_STEP_SUMMARY
+          echo "brew install allyas" >> $GITHUB_STEP_SUMMARY
+          echo "# or upgrade:" >> $GITHUB_STEP_SUMMARY
+          echo "brew update && brew upgrade allyas" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Homebrew tap updated at [rezkam/homebrew-allyas](https://github.com/rezkam/homebrew-allyas)" >> $GITHUB_STEP_SUMMARY
