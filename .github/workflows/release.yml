@@ -39,26 +39,6 @@ jobs:
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
           echo "🔐 SHA256: $SHA256"
 
-      - name: Generate formula from template
-        run: |
-          TEMPLATE_FILE="support/formula-template.rb"
-          OUTPUT_FILE="allyas.rb"
-
-          VERSION="${{ steps.version.outputs.version }}"
-          SHA256="${{ steps.release.outputs.sha256 }}"
-          TARBALL_URL="${{ steps.release.outputs.tarball_url }}"
-
-          echo "📝 Generating formula from template..."
-
-          # Replace Handlebars-style placeholders
-          sed -e "s|{{version}}|$VERSION|g" \
-              -e "s|{{sha256}}|$SHA256|g" \
-              -e "s|{{tarballUrl}}|$TARBALL_URL|g" \
-              "$TEMPLATE_FILE" > "$OUTPUT_FILE"
-
-          echo "✅ Formula generated:"
-          cat "$OUTPUT_FILE"
-
       - name: Checkout tap repository
         uses: actions/checkout@v4
         with:
@@ -68,11 +48,26 @@ jobs:
 
       - name: Update formula in tap repository
         run: |
-          # Copy generated formula to tap repo
-          mkdir -p tap-repo/Formula
-          cp allyas.rb tap-repo/Formula/allyas.rb
+          FORMULA_FILE="tap-repo/Formula/allyas.rb"
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256="${{ steps.release.outputs.sha256 }}"
+          TARBALL_URL="${{ steps.release.outputs.tarball_url }}"
 
-          echo "📂 Formula copied to tap repository"
+          echo "📝 Updating formula in tap repository..."
+
+          # Update url line
+          sed -i "s|url \".*\"|url \"$TARBALL_URL\"|" "$FORMULA_FILE"
+
+          # Update sha256 line
+          sed -i "s|sha256 \".*\"|sha256 \"$SHA256\"|" "$FORMULA_FILE"
+
+          # Update version line
+          sed -i "s|version \".*\"|version \"$VERSION\"|" "$FORMULA_FILE"
+
+          echo "✅ Formula updated with:"
+          echo "   Version: $VERSION"
+          echo "   SHA256: $SHA256"
+          echo "   URL: $TARBALL_URL"
 
       - name: Commit and push to tap repository
         working-directory: tap-repo
