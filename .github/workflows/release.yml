@@ -19,8 +19,8 @@ jobs:
           # Remove 'v' prefix from tag to get version number
           VERSION=${GITHUB_REF#refs/tags/v}
           TAG=${GITHUB_REF#refs/tags/}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "📦 Version: $VERSION"
           echo "🏷️  Tag: $TAG"
 
@@ -28,10 +28,17 @@ jobs:
         id: release
         run: |
           TAG="${{ steps.version.outputs.tag }}"
+          REPO="${{ github.repository }}"
 
-          # Construct tarball URL (from source repo: rezkam/allyas)
-          TARBALL_URL="https://github.com/rezkam/allyas/archive/refs/tags/$TAG.tar.gz"
-          echo "tarball_url=$TARBALL_URL" >> $GITHUB_OUTPUT
+          # Verify we're running from the correct repository
+          if [ "$REPO" != "rezkam/allyas" ]; then
+            echo "❌ This workflow must run from rezkam/allyas, not $REPO"
+            exit 1
+          fi
+
+          # Construct tarball URL
+          TARBALL_URL="https://github.com/$REPO/archive/refs/tags/$TAG.tar.gz"
+          echo "tarball_url=$TARBALL_URL" >> "$GITHUB_OUTPUT"
           echo "🔗 Tarball URL: $TARBALL_URL"
 
           # Wait for GitHub to generate the tarball
@@ -42,12 +49,23 @@ jobs:
           echo "📥 Downloading tarball and calculating SHA256..."
           SHA256=""
           for i in {1..5}; do
-            SHA256=$(curl -sL "$TARBALL_URL" 2>/dev/null | shasum -a 256 | awk '{print $1}') || true
-            if [ -n "$SHA256" ]; then
-              echo "sha256=$SHA256" >> $GITHUB_OUTPUT
-              echo "🔐 SHA256: $SHA256"
-              break
+            # Download to temporary file with proper error handling
+            if curl -fsSL "$TARBALL_URL" -o /tmp/tarball.tar.gz 2>/dev/null; then
+              # Verify it's actually a gzip file
+              if gzip -t /tmp/tarball.tar.gz 2>/dev/null; then
+                SHA256=$(shasum -a 256 /tmp/tarball.tar.gz | awk '{print $1}')
+                if [ -n "$SHA256" ]; then
+                  echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+                  echo "🔐 SHA256: $SHA256"
+                  rm -f /tmp/tarball.tar.gz
+                  break
+                fi
+              else
+                echo "⚠️  Downloaded file is not a valid gzip archive"
+              fi
             fi
+            rm -f /tmp/tarball.tar.gz
+            SHA256=""
             echo "⚠️  Retry $i/5 failed, waiting..."
             sleep 3
           done
@@ -73,14 +91,29 @@ jobs:
 
           echo "📝 Updating formula in tap repository..."
 
-          # Update url line
-          sed -i "s|url \".*\"|url \"$TARBALL_URL\"|" "$FORMULA_FILE"
+          # Update url line (anchored to match only the main url definition)
+          sed -i "s@^  url \"[^\"]*\"@  url \"$TARBALL_URL\"@" "$FORMULA_FILE"
 
-          # Update sha256 line
-          sed -i "s|sha256 \".*\"|sha256 \"$SHA256\"|" "$FORMULA_FILE"
+          # Update sha256 line (anchored to match only the main sha256 definition)
+          sed -i "s@^  sha256 \"[^\"]*\"@  sha256 \"$SHA256\"@" "$FORMULA_FILE"
 
-          # Update version line
-          sed -i "s|version \".*\"|version \"$VERSION\"|" "$FORMULA_FILE"
+          # Update version line (anchored to match only the main version definition)
+          sed -i "s@^  version \"[^\"]*\"@  version \"$VERSION\"@" "$FORMULA_FILE"
+
+          # Verify all fields were actually updated
+          echo "🔍 Verifying formula updates..."
+          if ! grep -q "^  url \"$TARBALL_URL\"" "$FORMULA_FILE"; then
+            echo "❌ Failed to update url in formula"
+            exit 1
+          fi
+          if ! grep -q "^  sha256 \"$SHA256\"" "$FORMULA_FILE"; then
+            echo "❌ Failed to update sha256 in formula"
+            exit 1
+          fi
+          if ! grep -q "^  version \"$VERSION\"" "$FORMULA_FILE"; then
+            echo "❌ Failed to update version in formula"
+            exit 1
+          fi
 
           echo "✅ Formula updated with:"
           echo "   Version: $VERSION"
