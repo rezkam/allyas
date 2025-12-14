@@ -40,8 +40,9 @@ jobs:
 
           # Download and calculate SHA256 with retries
           echo "📥 Downloading tarball and calculating SHA256..."
+          SHA256=""
           for i in {1..5}; do
-            SHA256=$(curl -sL "$TARBALL_URL" | shasum -a 256 | awk '{print $1}')
+            SHA256=$(curl -sL "$TARBALL_URL" 2>/dev/null | shasum -a 256 | awk '{print $1}') || true
             if [ -n "$SHA256" ]; then
               echo "sha256=$SHA256" >> $GITHUB_OUTPUT
               echo "🔐 SHA256: $SHA256"
