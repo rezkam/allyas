@@ -142,7 +142,9 @@ alias gamend='git commit --amend --no-edit'    # Quick amend without editor
 alias lsd='ls -d */'
 
 # Find processes
-alias psg='ps aux | grep -v grep | grep -i -e VSZ -e'
+psg() {
+  ps aux | grep -E "(VSZ|$1)"
+}
 
 # Disk usage
 alias duh='du -h -d 1'  # Works on macOS (and GNU with coreutils)
