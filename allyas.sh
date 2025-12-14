@@ -267,6 +267,21 @@ case $- in
     ;;
 esac
 
+# Grep
+alias grep='grep --color=auto'  # Colorize grep output
+
+# File listing variants
+alias lt='ls -ltrh'  # Sort by time, newest last
+alias lsize='ls -lSrh'  # Sort by size, smallest first
+alias count='find . -type f | wc -l'  # Count files in directory
+
+# Time & Date
+alias now='date +"%Y-%m-%d %H:%M:%S"'  # Current date and time
+alias week='date +%V'  # Current week number
+
+# Quick navigation
+alias cdtemp='cd $(mktemp -d)'  # Create and cd to temp directory
+
 # ============================================================================
 # Git Aliases
 # ============================================================================
@@ -560,6 +575,25 @@ alias gamend='git commit --amend --no-edit'    # Quick amend without editor
 # Quick directory listing
 alias lsd='ls -d */'
 
+# Find files and directories
+# Find files by name (usage: findf '*.txt')
+findf() {
+  if [ -z "$1" ]; then
+    echo "Usage: findf <filename_pattern>"
+    return 1
+  fi
+  find . -type f -name "$1"
+}
+
+# Find directories by name (usage: findd 'dirname')
+findd() {
+  if [ -z "$1" ]; then
+    echo "Usage: findd <dirname_pattern>"
+    return 1
+  fi
+  find . -type d -name "$1"
+}
+
 # Find processes
 # Search for running processes by name
 psg() {
@@ -569,6 +603,10 @@ psg() {
   fi
   ps aux | grep -i -- "$1" | grep -v grep
 }
+
+# Config file editing
+alias zshrc='nano ~/.zshrc'  # Edit zsh config
+alias bashrc='nano ~/.bashrc'  # Edit bash config
 
 # Disk usage
 alias duh='du -h -d 1'  # Works on macOS (and GNU with coreutils)
@@ -581,6 +619,31 @@ alias ports='sudo lsof -iTCP -sTCP:LISTEN -n -P'
 # ============================================================================
 # macOS Specific Aliases
 # ============================================================================
+
+# Clipboard shortcuts
+alias copy='pbcopy'  # Copy to clipboard
+alias paste='pbpaste'  # Paste from clipboard
+alias cpwd='pwd | pbcopy'  # Copy current directory path
+
+# Copy full path of a file to clipboard
+cpf() {
+  if [ -z "$1" ]; then
+    echo "Usage: cpf <file>"
+    echo "Copies the absolute path of the file to clipboard"
+    return 1
+  fi
+
+  if [ ! -e "$1" ]; then
+    echo "Error: '$1' does not exist"
+    return 1
+  fi
+
+  readlink -f "$1" | pbcopy
+  echo "Copied: $(pbpaste)"
+}
+
+# Finder shortcuts
+alias o='open .'  # Open current directory in Finder
 
 # Show/hide hidden files in Finder
 alias showfiles='defaults write com.apple.finder AppleShowAllFiles YES; killall Finder'
