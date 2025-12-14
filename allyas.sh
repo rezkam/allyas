@@ -31,16 +31,30 @@ alias mv='mv -i'
 
 # Helper function to get the default branch (main/master)
 rootbranch() {
-  local branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
+  local branch
+  branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
   if [ -n "$branch" ]; then
     echo "$branch"
-  elif git show-ref --verify --quiet refs/heads/main; then
+  elif git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
     echo "main"
-  elif git show-ref --verify --quiet refs/heads/master; then
+  elif git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
     echo "master"
   else
     echo "main"
   fi
+}
+
+# Portable confirmation prompt for both bash and zsh
+confirm_action() {
+  local prompt="${1:-Are you sure? [y/N] }"
+  local reply
+  printf "%s" "$prompt"
+  read -r reply
+  echo
+  case "$reply" in
+    [Yy]*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # Status & Info
@@ -78,7 +92,7 @@ alias gifn='git diff --name-only'              # Show only file names
 alias gush='git push origin "$(git branch --show-current)"'
 alias gushf='git push --force-with-lease'      # Safer force push
 alias gull='git pull'
-alias gullm='git fetch origin && git rebase "$(rootbranch)"'
+alias gullm='git fetch origin && git rebase "origin/$(rootbranch)"'
 alias gullr='git pull --rebase'                # Pull with rebase
 
 # Fetch
@@ -94,18 +108,14 @@ alias gc-='git checkout -'                     # Checkout previous branch
 # Reset & Undo
 girha() {
   echo "⚠️  WARNING: This will discard ALL uncommitted changes!"
-  read -p "Are you sure? [y/N] " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
+  if confirm_action "Are you sure? [y/N] "; then
     git reset --hard "$@"
   fi
 }
 
 girhah() {
   echo "⚠️  WARNING: This will reset to HEAD and discard all changes!"
-  read -p "Are you sure? [y/N] " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
+  if confirm_action "Are you sure? [y/N] "; then
     git reset --hard HEAD
   fi
 }
@@ -115,9 +125,7 @@ alias girh1='git reset HEAD~1'                 # Undo last commit (keep changes)
 
 girhu() {
   echo "⚠️  WARNING: This will reset to upstream and discard all local changes!"
-  read -p "Are you sure? [y/N] " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
+  if confirm_action "Are you sure? [y/N] "; then
     git reset --hard @{u}
   fi
 }
@@ -159,9 +167,7 @@ alias gwtr='git worktree remove'
 gclean() {
   echo "⚠️  WARNING: This will permanently delete all untracked files and directories!"
   git clean -fd --dry-run
-  read -p "Proceed with deletion? [y/N] " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
+  if confirm_action "Proceed with deletion? [y/N] "; then
     git clean -fd
   fi
 }
@@ -170,9 +176,7 @@ alias gprune='git remote prune origin'         # Clean up deleted remote branche
 
 ggc() {
   echo "⚠️  WARNING: Aggressive garbage collection can take a long time!"
-  read -p "Continue? [y/N] " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
+  if confirm_action "Continue? [y/N] "; then
     git gc --aggressive
   fi
 }
