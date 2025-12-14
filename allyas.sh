@@ -145,12 +145,12 @@ alias lsd='ls -d */'
 alias psg='ps aux | grep -v grep | grep -i -e VSZ -e'
 
 # Disk usage
-alias duh='du -h --max-depth=1'
+alias duh='du -h -d 1'  # Works on macOS (and GNU with coreutils)
 alias dfs='df -h'
 
 # Network
 alias myip='curl -s ifconfig.me'
-alias ports='netstat -tulanp'
+alias ports='sudo lsof -iTCP -sTCP:LISTEN -n -P'
 
 # ============================================================================
 # macOS Specific Aliases

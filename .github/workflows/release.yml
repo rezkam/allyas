@@ -34,10 +34,27 @@ jobs:
           echo "tarball_url=$TARBALL_URL" >> $GITHUB_OUTPUT
           echo "🔗 Tarball URL: $TARBALL_URL"
 
-          # Download and calculate SHA256
-          SHA256=$(curl -sL "$TARBALL_URL" | shasum -a 256 | awk '{print $1}')
-          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
-          echo "🔐 SHA256: $SHA256"
+          # Wait for GitHub to generate the tarball
+          echo "⏳ Waiting for GitHub to generate tarball..."
+          sleep 5
+
+          # Download and calculate SHA256 with retries
+          echo "📥 Downloading tarball and calculating SHA256..."
+          for i in {1..5}; do
+            SHA256=$(curl -sL "$TARBALL_URL" | shasum -a 256 | awk '{print $1}')
+            if [ -n "$SHA256" ]; then
+              echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+              echo "🔐 SHA256: $SHA256"
+              break
+            fi
+            echo "⚠️  Retry $i/5 failed, waiting..."
+            sleep 3
+          done
+
+          if [ -z "$SHA256" ]; then
+            echo "❌ Failed to calculate SHA256 after 5 retries"
+            exit 1
+          fi
 
       - name: Checkout tap repository
         uses: actions/checkout@v4
