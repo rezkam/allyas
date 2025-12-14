@@ -20,28 +20,51 @@ alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
 
-# Safety nets
-alias rm='rm -i'
-alias cp='cp -i'
-alias mv='mv -i'
+# Safety nets (only in interactive shells to avoid breaking automation)
+case $- in
+  *i*)
+    alias rm='rm -i'
+    alias cp='cp -i'
+    alias mv='mv -i'
+    ;;
+esac
 
 # ============================================================================
 # Git Aliases
 # ============================================================================
 
-# Helper function to get the default branch (main/master)
+# Helper function to get the default branch
 rootbranch() {
-  local branch
-  branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
-  if [ -n "$branch" ]; then
-    echo "$branch"
-  elif git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
-    echo "main"
-  elif git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
-    echo "master"
-  else
-    echo "main"
+  local branch remote
+
+  # Try to get the current branch's remote
+  remote=$(git config --get branch."$(git branch --show-current 2>/dev/null)".remote 2>/dev/null)
+
+  # Fall back to 'origin' if no remote found
+  remote=${remote:-origin}
+
+  # Try remote HEAD
+  branch=$(git symbolic-ref --short refs/remotes/"$remote"/HEAD 2>/dev/null | sed "s|^$remote/||")
+
+  # Try git remote show (slower but more reliable)
+  if [ -z "$branch" ]; then
+    branch=$(git remote show "$remote" 2>/dev/null | grep "HEAD branch" | sed 's/.*: //')
   fi
+
+  # Fall back to checking for common default branches
+  if [ -z "$branch" ]; then
+    if git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
+      branch="main"
+    elif git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
+      branch="master"
+    elif git show-ref --verify --quiet refs/heads/develop 2>/dev/null; then
+      branch="develop"
+    else
+      branch="main"
+    fi
+  fi
+
+  echo "$branch"
 }
 
 # Portable confirmation prompt for both bash and zsh
@@ -124,6 +147,10 @@ alias girh='git reset HEAD'                    # Unstage all
 alias girh1='git reset HEAD~1'                 # Undo last commit (keep changes)
 
 girhu() {
+  if ! git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; then
+    echo "❌ No upstream configured for current branch"
+    return 1
+  fi
   echo "⚠️  WARNING: This will reset to upstream and discard all local changes!"
   if confirm_action "Are you sure? [y/N] "; then
     git reset --hard @{u}
