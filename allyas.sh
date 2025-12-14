@@ -33,15 +33,25 @@ esac
 # Git Aliases
 # ============================================================================
 
+# Helper function to get the current branch name
+get_current_branch() {
+  git branch --show-current 2>/dev/null
+}
+
+# Helper function to get the remote for a branch
+get_remote() {
+  local branch="${1:-$(get_current_branch)}"
+  local remote
+  remote=$(git config --get branch."$branch".remote 2>/dev/null)
+  echo "${remote:-origin}"
+}
+
 # Helper function to get the default branch
-rootbranch() {
+default_branch() {
   local branch remote
 
-  # Try to get the current branch's remote
-  remote=$(git config --get branch."$(git branch --show-current 2>/dev/null)".remote 2>/dev/null)
-
-  # Fall back to 'origin' if no remote found
-  remote=${remote:-origin}
+  # Get the remote for the current branch
+  remote=$(get_remote)
 
   # Try remote HEAD
   branch=$(git symbolic-ref --short refs/remotes/"$remote"/HEAD 2>/dev/null | sed "s|^$remote/||")
@@ -49,6 +59,10 @@ rootbranch() {
   # Try git remote show (slower but more reliable)
   if [ -z "$branch" ]; then
     branch=$(git remote show "$remote" 2>/dev/null | grep "HEAD branch" | sed 's/.*: //')
+    # Treat "(unknown)" as not found
+    if [ "$branch" = "(unknown)" ]; then
+      branch=""
+    fi
   fi
 
   # Fall back to checking for common default branches
@@ -113,14 +127,21 @@ alias gifn='git diff --name-only'              # Show only file names
 
 # Push & Pull
 gush() {
-  local branch
-  branch=$(git branch --show-current 2>/dev/null)
+  local branch remote
+  branch=$(get_current_branch)
   if [ -z "$branch" ]; then
     echo "❌ Cannot push: detached HEAD state (not on any branch)"
-    echo "Use 'git push origin HEAD:<branch-name>' to push explicitly"
+    echo "Use 'git push <remote> HEAD:<branch-name>' to push explicitly"
     return 1
   fi
-  git push origin "$branch"
+
+  # Derive the remote from the tracking branch
+  remote=$(get_remote "$branch")
+
+  if ! git push "$remote" "$branch"; then
+    echo "❌ Push failed"
+    return 1
+  fi
 }
 
 alias gushf='git push --force-with-lease'      # Safer force push
@@ -128,10 +149,18 @@ alias gull='git pull'
 
 gullm() {
   local remote branch
-  remote=$(git config --get branch."$(git branch --show-current 2>/dev/null)".remote 2>/dev/null)
-  remote=${remote:-origin}
-  branch=$(rootbranch)
-  git fetch "$remote" && git rebase "$remote/$branch"
+  remote=$(get_remote)
+  branch=$(default_branch)
+
+  if ! git fetch "$remote"; then
+    echo "❌ Fetch failed"
+    return 1
+  fi
+
+  if ! git rebase "$remote/$branch"; then
+    echo "❌ Rebase failed - you may need to resolve conflicts"
+    return 1
+  fi
 }
 
 alias gullr='git pull --rebase'                # Pull with rebase
@@ -143,7 +172,7 @@ alias gifap='git fetch --all --prune'          # Fetch and prune deleted branche
 # Checkout & Branch
 alias gco='git checkout'
 alias gcb='git checkout -b'                    # Create and checkout new branch
-alias gcm='git checkout "$(rootbranch)"'       # Checkout main/master
+alias gcm='git checkout "$(default_branch)"'       # Checkout main/master
 alias gc-='git checkout -'                     # Checkout previous branch
 
 # Reset & Undo
@@ -217,7 +246,11 @@ gclean() {
   fi
 }
 
-alias gprune='git remote prune origin'         # Clean up deleted remote branches
+gprune() {
+  local remote
+  remote=$(get_remote)
+  git remote prune "$remote"
+}
 
 ggc() {
   echo "⚠️  WARNING: Aggressive garbage collection can take a long time!"
