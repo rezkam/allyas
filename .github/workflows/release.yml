@@ -131,9 +131,8 @@ jobs:
           if git diff --staged --quiet; then
             echo "ℹ️  No changes to commit"
           else
-            git commit -m "Update formula to version ${{ steps.version.outputs.version }}
-
-Auto-generated from rezkam/allyas@${{ steps.version.outputs.tag }}"
+            git commit -m "Update formula to version ${{ steps.version.outputs.version }}" \
+              -m "Auto-generated from rezkam/allyas@${{ steps.version.outputs.tag }}"
             git push
             echo "✅ Formula pushed to homebrew-allyas repository"
           fi
