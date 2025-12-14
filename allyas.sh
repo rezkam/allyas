@@ -5,6 +5,245 @@
 # To use these aliases, add this line to your shell configuration:
 #   [ -f $(brew --prefix)/etc/allyas.sh ] && . $(brew --prefix)/etc/allyas.sh
 
+# Display all aliases and functions defined in this file
+allyas() {
+  local source_file=""
+
+  if [ -n "${ALLYAS_SOURCE_FILE:-}" ] && [ -f "${ALLYAS_SOURCE_FILE}" ]; then
+    source_file="${ALLYAS_SOURCE_FILE}"
+  elif [ -n "${BASH_SOURCE:-}" ]; then
+    source_file="${BASH_SOURCE[0]}"
+  elif [ -n "${ZSH_VERSION:-}" ]; then
+    eval 'source_file="${(%):-%x}"'
+  else
+    source_file="$0"
+  fi
+
+  if [ -z "$source_file" ] || [ ! -f "$source_file" ]; then
+    echo "allyas: unable to locate the definitions file (${source_file:-unknown})"
+    return 1
+  fi
+
+  awk -f /dev/stdin "$source_file" <<'AWK'
+    function trim(s) {
+      sub(/^[[:space:]]+/, "", s)
+      sub(/[[:space:]]+$/, "", s)
+      return s
+    }
+
+    function strip_quotes(s) {
+      s = trim(s)
+      if (length(s) >= 2) {
+        first = substr(s, 1, 1)
+        last = substr(s, length(s), 1)
+        if ((first == "\"" && last == "\"") || (first == "'" && last == "'")) {
+          s = substr(s, 2, length(s) - 2)
+        }
+      }
+      return s
+    }
+
+    function add_entry(type, text, desc, extra) {
+      entry_count++
+      entry_type[entry_count] = type
+      entry_text[entry_count] = text
+      entry_desc[entry_count] = desc
+      entry_extra[entry_count] = extra
+      if (type == "alias" || type == "function") {
+        current_length = length(text)
+        if (current_length > max_name_width) {
+          max_name_width = current_length
+        }
+      }
+    }
+
+    function flush_heading() {
+      if (pending_heading == "") {
+        return
+      }
+      n = split(pending_heading, lines, "\n")
+      for (i = 1; i <= n; i++) {
+        add_entry("heading", lines[i], "", "")
+      }
+      pending_heading = ""
+    }
+
+    function show_alias(name, command, desc) {
+      add_entry("alias", name, desc, command)
+    }
+
+    function show_function(name, desc) {
+      add_entry("function", name, desc, "")
+    }
+
+    BEGIN {
+      section = ""
+      pending_heading = ""
+      next_section = 0
+      started = 0
+      in_heredoc = 0
+      heredoc_end = ""
+      skip_next_function = 0
+      skip_separator = 0
+      entry_count = 0
+      max_name_width = 0
+      function_depth = 0
+    }
+
+    {
+      line = $0
+      trimmed = line
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", trimmed)
+
+      if (in_heredoc) {
+        if (trimmed == heredoc_end) {
+          in_heredoc = 0
+        }
+        next
+      }
+
+      if (!in_heredoc && line ~ /<<'AWK'/) {
+        in_heredoc = 1
+        heredoc_end = "AWK"
+        next
+      }
+
+      if (!in_heredoc && line ~ /^[[:space:]]*}[[:space:]]*$/) {
+        if (function_depth > 0) {
+          function_depth--
+        }
+        pending_heading = ""
+        next
+      }
+
+      if (function_depth > 0) {
+        next
+      }
+
+      if (line ~ /^#[[:space:]]*=+/) {
+        if (skip_separator) {
+          skip_separator = 0
+          next
+        }
+        next_section = 1
+        pending_heading = ""
+        next
+      }
+
+      if (next_section && line ~ /^#[[:space:]]*/) {
+        section = line
+        sub(/^#[[:space:]]*/, "", section)
+        section = trim(section)
+        if (section != "") {
+          add_entry("section", section, "", "")
+          started = 1
+          skip_separator = 1
+        }
+        next_section = 0
+        pending_heading = ""
+        next
+      }
+
+      if (!started) {
+        next
+      }
+
+      if (trimmed == "") {
+        pending_heading = ""
+        next
+      }
+
+      if (line ~ /^[[:space:]]*#/) {
+        comment = line
+        sub(/^#[[:space:]]*/, "", comment)
+        comment = trim(comment)
+        if (comment ~ /allyas:ignore/) {
+          skip_next_function = 1
+          next
+        }
+        if (comment != "") {
+          if (pending_heading != "") {
+            flush_heading()
+          }
+          pending_heading = comment
+        }
+        next
+      }
+
+      if (line ~ /^[[:space:]]*alias[[:space:]]+/) {
+        alias_line = line
+        sub(/^[[:space:]]*alias[[:space:]]+/, "", alias_line)
+        eq = index(alias_line, "=")
+        if (eq <= 0) {
+          next
+        }
+        name = trim(substr(alias_line, 1, eq - 1))
+        rest = substr(alias_line, eq + 1)
+        desc = ""
+        hash = index(rest, "#")
+        if (hash > 0) {
+          desc = trim(substr(rest, hash + 1))
+          rest = substr(rest, 1, hash - 1)
+        }
+        command = strip_quotes(rest)
+        command = trim(command)
+        show_alias(name, command, desc)
+        next
+      }
+
+      if (line ~ /^[[:space:]]*[A-Za-z0-9_]+[[:space:]]*\(\)[[:space:]]*{/) {
+        func_line = line
+        sub(/^[[:space:]]*/, "", func_line)
+        sub(/\(.*/, "", func_line)
+        name = trim(func_line)
+        desc = pending_heading
+        if (desc == "") {
+          desc = "Shell function"
+        }
+        if (!(name ~ /^_/ || skip_next_function)) {
+          show_function(name, desc)
+        }
+        pending_heading = ""
+        skip_next_function = 0
+        function_depth++
+        next
+      }
+    }
+
+    END {
+      if (max_name_width < 1) {
+        max_name_width = 1
+      }
+      item_format = sprintf("  %%-%ds  %%s", max_name_width)
+      spaced = 0
+      for (i = 1; i <= entry_count; i++) {
+        type = entry_type[i]
+        text = entry_text[i]
+        desc = entry_desc[i]
+        extra = entry_extra[i]
+        if (type == "section") {
+          if (spaced) {
+            print ""
+          }
+          print text
+          spaced = 1
+        } else if (type == "heading") {
+          print "  " text
+        } else if (type == "alias") {
+          display = extra
+          if (desc != "") {
+            display = desc
+          }
+          print sprintf(item_format, text, display)
+        } else if (type == "function") {
+          print sprintf(item_format, text, desc)
+        }
+      }
+    }
+
+AWK
+}
+
 # ============================================================================
 # General Aliases
 # ============================================================================
@@ -32,12 +271,12 @@ esac
 # Git Aliases
 # ============================================================================
 
-# Helper function to get the current branch name
+# allyas:ignore Helper function to get the current branch name
 get_current_branch() {
   git branch --show-current 2>/dev/null
 }
 
-# Helper function to get the remote for a branch
+# allyas:ignore Helper function to get the remote for a branch
 get_remote() {
   local branch="${1:-$(get_current_branch)}"
   local remote
@@ -45,7 +284,7 @@ get_remote() {
   echo "${remote:-origin}"
 }
 
-# Helper function to get the remote used for pushes
+# allyas:ignore Helper function to get the remote used for pushes
 get_push_remote() {
   local branch="${1:-$(get_current_branch)}"
   local remote=""
@@ -65,7 +304,7 @@ get_push_remote() {
   echo "${remote:-origin}"
 }
 
-# Helper function to get the default branch
+# allyas:ignore Helper function to get the default branch
 default_branch() {
   local branch remote
 
@@ -113,7 +352,7 @@ default_branch() {
   echo "$branch"
 }
 
-# Helper to push the current branch with optional git push flags
+# allyas:ignore Helper to push the current branch with optional git push flags
 push_current_branch() {
   local branch remote
   branch=$(get_current_branch)
@@ -131,7 +370,7 @@ push_current_branch() {
   fi
 }
 
-# Portable confirmation prompt for both bash and zsh
+# allyas:ignore Portable confirmation prompt for both bash and zsh
 confirm_action() {
   local prompt="${1:-Are you sure? [y/N] }"
   local reply
@@ -176,6 +415,7 @@ alias gifw='git diff --word-diff'              # Word-level diff
 alias gifn='git diff --name-only'              # Show only file names
 
 # Push & Pull
+# Push current branch to its configured remote
 gush() {
   push_current_branch
 }
@@ -187,6 +427,7 @@ gushf() {
 
 alias gull='git pull'
 
+# Pull and rebase from the default branch (main/master)
 gullm() {
   local remote branch
   remote=$(get_remote)
@@ -216,6 +457,7 @@ alias gcm='git checkout "$(default_branch)"'       # Checkout main/master
 alias gc-='git checkout -'                     # Checkout previous branch
 
 # Reset & Undo
+# Hard reset with confirmation (discards all uncommitted changes)
 girha() {
   echo "⚠️  WARNING: This will discard ALL uncommitted changes!"
   if confirm_action "Are you sure? [y/N] "; then
@@ -223,6 +465,7 @@ girha() {
   fi
 }
 
+# Hard reset to HEAD with confirmation (discards all uncommitted changes)
 girhah() {
   echo "⚠️  WARNING: This will reset to HEAD and discard all changes!"
   if confirm_action "Are you sure? [y/N] "; then
@@ -233,6 +476,7 @@ girhah() {
 alias girh='git reset HEAD'                    # Unstage all
 alias girh1='git reset HEAD~1'                 # Undo last commit (keep changes)
 
+# Hard reset to upstream with confirmation (discards all local changes)
 girhu() {
   if ! git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; then
     echo "❌ No upstream configured for current branch"
@@ -279,6 +523,7 @@ alias gwtr='git worktree remove'
 
 # Cleanup & Maintenance
 unalias gclean 2>/dev/null || true
+# Remove untracked files and directories with confirmation
 gclean() {
   echo "⚠️  WARNING: This will permanently delete all untracked files and directories!"
   git clean -fd --dry-run
@@ -287,12 +532,14 @@ gclean() {
   fi
 }
 
+# Prune deleted remote branches from local repository
 gprune() {
   local remote
   remote=$(get_remote)
   git remote prune "$remote"
 }
 
+# Run aggressive garbage collection to optimize repository
 ggc() {
   echo "⚠️  WARNING: Aggressive garbage collection can take a long time!"
   if confirm_action "Continue? [y/N] "; then
@@ -314,6 +561,7 @@ alias gamend='git commit --amend --no-edit'    # Quick amend without editor
 alias lsd='ls -d */'
 
 # Find processes
+# Search for running processes by name
 psg() {
   if [ -z "$1" ]; then
     echo "Usage: psg <process_name>"

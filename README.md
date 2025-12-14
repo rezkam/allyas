@@ -21,6 +21,10 @@ brew install allyas
 
 For more details, see [homebrew-allyas](https://github.com/rezkam/homebrew-allyas).
 
+## Usage
+
+After sourcing `allyas.sh` (usually via the Homebrew shim), run the `allyas` command to print every alias/function along with the section headings they live under. This is the quickest way to discover the shortcuts that are available in your shell session.
+
 ## Features
 
 - **Automated releases**: Tag once, everything else is automatic
