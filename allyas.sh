@@ -245,7 +245,7 @@ psg() {
     echo "Usage: psg <process_name>"
     return 1
   fi
-  ps aux | grep -i "$1" | grep -v grep
+  ps aux | grep -i -- "$1" | grep -v grep
 }
 
 # Disk usage
