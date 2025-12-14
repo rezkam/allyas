@@ -125,7 +125,15 @@ gush() {
 
 alias gushf='git push --force-with-lease'      # Safer force push
 alias gull='git pull'
-alias gullm='git fetch origin && git rebase "origin/$(rootbranch)"'
+
+gullm() {
+  local remote branch
+  remote=$(git config --get branch."$(git branch --show-current 2>/dev/null)".remote 2>/dev/null)
+  remote=${remote:-origin}
+  branch=$(rootbranch)
+  git fetch "$remote" && git rebase "$remote/$branch"
+}
+
 alias gullr='git pull --rebase'                # Pull with rebase
 
 # Fetch
