@@ -8,7 +8,6 @@ This is the **source code repository** for allyas. The Homebrew formula is maint
 
 `allyas` is a collection of shell aliases that can be installed and managed via Homebrew. This repository contains:
 - `allyas.sh` - The shell aliases file
-- `support/formula-template.rb` - Template for the Homebrew formula
 - `.github/workflows/release.yml` - Automation that updates the Homebrew tap
 
 ## Installation (for users)
