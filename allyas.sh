@@ -112,7 +112,17 @@ alias gifw='git diff --word-diff'              # Word-level diff
 alias gifn='git diff --name-only'              # Show only file names
 
 # Push & Pull
-alias gush='git push origin "$(git branch --show-current)"'
+gush() {
+  local branch
+  branch=$(git branch --show-current 2>/dev/null)
+  if [ -z "$branch" ]; then
+    echo "❌ Cannot push: detached HEAD state (not on any branch)"
+    echo "Use 'git push origin HEAD:<branch-name>' to push explicitly"
+    return 1
+  fi
+  git push origin "$branch"
+}
+
 alias gushf='git push --force-with-lease'      # Safer force push
 alias gull='git pull'
 alias gullm='git fetch origin && git rebase "origin/$(rootbranch)"'
