@@ -31,7 +31,16 @@ alias mv='mv -i'
 
 # Helper function to get the default branch (main/master)
 rootbranch() {
-  git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||'
+  local branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
+  if [ -n "$branch" ]; then
+    echo "$branch"
+  elif git show-ref --verify --quiet refs/heads/main; then
+    echo "main"
+  elif git show-ref --verify --quiet refs/heads/master; then
+    echo "master"
+  else
+    echo "main"
+  fi
 }
 
 # Status & Info
@@ -104,7 +113,6 @@ alias gira='git remote add'
 alias girr='git remote remove'
 
 # Merge & Rebase
-alias gim='git merge'
 alias gimnf='git merge --no-ff'                # Merge with merge commit
 alias gire='git rebase'
 alias girei='git rebase -i'                    # Interactive rebase
@@ -143,7 +151,11 @@ alias lsd='ls -d */'
 
 # Find processes
 psg() {
-  ps aux | grep -E "(VSZ|$1)"
+  if [ -z "$1" ]; then
+    echo "Usage: psg <process_name>"
+    return 1
+  fi
+  ps aux | grep -i "$1" | grep -v grep
 }
 
 # Disk usage
