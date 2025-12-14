@@ -278,6 +278,7 @@ alias gwtl='git worktree list'
 alias gwtr='git worktree remove'
 
 # Cleanup & Maintenance
+unalias gclean 2>/dev/null || true
 gclean() {
   echo "⚠️  WARNING: This will permanently delete all untracked files and directories!"
   git clean -fd --dry-run
