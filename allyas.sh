@@ -1,4 +1,3 @@
-#!/bin/bash
 # allyas - Personal shell aliases
 # Compatible with both bash and zsh
 # Installed via Homebrew: brew install rezkam/allyas/allyas
@@ -46,6 +45,26 @@ get_remote() {
   echo "${remote:-origin}"
 }
 
+# Helper function to get the remote used for pushes
+get_push_remote() {
+  local branch="${1:-$(get_current_branch)}"
+  local remote=""
+
+  if [ -n "$branch" ]; then
+    remote=$(git config --get branch."$branch".pushRemote 2>/dev/null)
+  fi
+
+  if [ -z "$remote" ]; then
+    remote=$(git config --get remote.pushDefault 2>/dev/null)
+  fi
+
+  if [ -z "$remote" ] && [ -n "$branch" ]; then
+    remote=$(git config --get branch."$branch".remote 2>/dev/null)
+  fi
+
+  echo "${remote:-origin}"
+}
+
 # Helper function to get the default branch
 default_branch() {
   local branch remote
@@ -74,11 +93,42 @@ default_branch() {
     elif git show-ref --verify --quiet refs/heads/develop 2>/dev/null; then
       branch="develop"
     else
+      branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+    fi
+  fi
+
+  # Final fallback if everything else failed
+  if [ -z "$branch" ]; then
+    if git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
+      branch="main"
+    elif git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
+      branch="master"
+    elif git show-ref --verify --quiet refs/heads/develop 2>/dev/null; then
+      branch="develop"
+    else
       branch="main"
     fi
   fi
 
   echo "$branch"
+}
+
+# Helper to push the current branch with optional git push flags
+push_current_branch() {
+  local branch remote
+  branch=$(get_current_branch)
+  if [ -z "$branch" ]; then
+    echo "❌ Cannot push: detached HEAD state (not on any branch)"
+    echo "Use 'git push <remote> HEAD:<branch-name>' to push explicitly"
+    return 1
+  fi
+
+  remote=$(get_push_remote "$branch")
+
+  if ! git push "$@" "$remote" "$branch"; then
+    echo "❌ Push failed"
+    return 1
+  fi
 }
 
 # Portable confirmation prompt for both bash and zsh
@@ -127,24 +177,14 @@ alias gifn='git diff --name-only'              # Show only file names
 
 # Push & Pull
 gush() {
-  local branch remote
-  branch=$(get_current_branch)
-  if [ -z "$branch" ]; then
-    echo "❌ Cannot push: detached HEAD state (not on any branch)"
-    echo "Use 'git push <remote> HEAD:<branch-name>' to push explicitly"
-    return 1
-  fi
-
-  # Derive the remote from the tracking branch
-  remote=$(get_remote "$branch")
-
-  if ! git push "$remote" "$branch"; then
-    echo "❌ Push failed"
-    return 1
-  fi
+  push_current_branch
 }
 
-alias gushf='git push --force-with-lease'      # Safer force push
+# Force push with lease (with same safety checks)
+gushf() {
+  push_current_branch --force-with-lease
+}
+
 alias gull='git pull'
 
 gullm() {
