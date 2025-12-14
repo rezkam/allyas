@@ -92,11 +92,35 @@ alias gcm='git checkout "$(rootbranch)"'       # Checkout main/master
 alias gc-='git checkout -'                     # Checkout previous branch
 
 # Reset & Undo
-alias girha='git reset --hard'
-alias girhah='git reset --hard HEAD'           # Reset to HEAD
+girha() {
+  echo "⚠️  WARNING: This will discard ALL uncommitted changes!"
+  read -p "Are you sure? [y/N] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    git reset --hard "$@"
+  fi
+}
+
+girhah() {
+  echo "⚠️  WARNING: This will reset to HEAD and discard all changes!"
+  read -p "Are you sure? [y/N] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    git reset --hard HEAD
+  fi
+}
+
 alias girh='git reset HEAD'                    # Unstage all
 alias girh1='git reset HEAD~1'                 # Undo last commit (keep changes)
-alias girhu='git reset --hard @{u}'            # Reset to upstream
+
+girhu() {
+  echo "⚠️  WARNING: This will reset to upstream and discard all local changes!"
+  read -p "Are you sure? [y/N] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    git reset --hard @{u}
+  fi
+}
 
 # Stash
 alias gist='git stash'
@@ -132,9 +156,26 @@ alias gwtl='git worktree list'
 alias gwtr='git worktree remove'
 
 # Cleanup & Maintenance
-alias gclean='git clean -fd'                   # Remove untracked files/dirs
+gclean() {
+  echo "⚠️  WARNING: This will permanently delete all untracked files and directories!"
+  git clean -fd --dry-run
+  read -p "Proceed with deletion? [y/N] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    git clean -fd
+  fi
+}
+
 alias gprune='git remote prune origin'         # Clean up deleted remote branches
-alias ggc='git gc --aggressive'                # Garbage collection
+
+ggc() {
+  echo "⚠️  WARNING: Aggressive garbage collection can take a long time!"
+  read -p "Continue? [y/N] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    git gc --aggressive
+  fi
+}
 
 # Shortcuts for common workflows
 alias gasave='git add -A && git commit -m "WIP: work in progress"'
