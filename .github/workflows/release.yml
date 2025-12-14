@@ -10,10 +10,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate tag format
+        id: validate_tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Tag $TAG matches vX.Y.Z"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Tag '$TAG' does not match vX.Y.Z. Release workflow will be skipped."
+          fi
+
       - name: Checkout source repository
+        if: steps.validate_tag.outputs.valid == 'true'
         uses: actions/checkout@v4
 
       - name: Extract version from tag
+        if: steps.validate_tag.outputs.valid == 'true'
         id: version
         run: |
           # Remove 'v' prefix from tag to get version number
@@ -25,6 +39,7 @@ jobs:
           echo "🏷️  Tag: $TAG"
 
       - name: Calculate SHA256 and create tarball URL
+        if: steps.validate_tag.outputs.valid == 'true'
         id: release
         run: |
           TAG="${{ steps.version.outputs.tag }}"
@@ -76,6 +91,7 @@ jobs:
           fi
 
       - name: Checkout tap repository
+        if: steps.validate_tag.outputs.valid == 'true'
         uses: actions/checkout@v4
         with:
           repository: rezkam/homebrew-allyas
@@ -83,6 +99,7 @@ jobs:
           path: tap-repo
 
       - name: Update formula in tap repository
+        if: steps.validate_tag.outputs.valid == 'true'
         run: |
           FORMULA_FILE="tap-repo/Formula/allyas.rb"
           VERSION="${{ steps.version.outputs.version }}"
@@ -121,6 +138,7 @@ jobs:
           echo "   URL: $TARBALL_URL"
 
       - name: Commit and push to tap repository
+        if: steps.validate_tag.outputs.valid == 'true'
         working-directory: tap-repo
         run: |
           git config user.name "github-actions[bot]"
@@ -138,6 +156,7 @@ jobs:
           fi
 
       - name: Create release summary
+        if: steps.validate_tag.outputs.valid == 'true'
         run: |
           echo "## 🎉 Release ${{ steps.version.outputs.tag }} published!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -154,3 +173,8 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Homebrew tap updated at [rezkam/homebrew-allyas](https://github.com/rezkam/homebrew-allyas)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Skip summary (invalid tag)
+        if: steps.validate_tag.outputs.valid != 'true'
+        run: |
+          echo "Tag ${GITHUB_REF#refs/tags/} does not match vX.Y.Z. Release workflow skipped."
