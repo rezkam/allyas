@@ -588,9 +588,3 @@ alias hidefiles='defaults write com.apple.finder AppleShowAllFiles NO; killall F
 
 # Flush DNS cache
 alias flushdns='sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder'
-
-# ============================================================================
-# Custom Aliases - Add your own below
-# ============================================================================
-
-# Add your personal aliases here
