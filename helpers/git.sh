@@ -1,5 +1,10 @@
 # Git Helper Functions
 # Internal helpers used by git aliases and functions
+#
+# Architecture:
+# - This file contains ONLY internal helper functions (prefixed with _ or marked with # allyas:ignore)
+# - All user-facing git aliases and functions are defined in allyas.sh
+# - This file is sourced at the END of allyas.sh to make helpers available
 
 # allyas:ignore Helper function to get the current branch name
 get_current_branch() {

@@ -1,22 +1,41 @@
 # LLM Helper Functions
 # Provides reusable functions for LLM-based analysis commands
+#
+# Architecture:
+# - This file contains ALL LLM-related logic (both internal helpers and user-facing functions)
+# - allyas.sh defines stub versions of user-facing functions (llm-use, llm-list) for introspection
+# - This file is sourced at the END of allyas.sh, overriding the stubs with real implementations
+# - Internal helpers (prefixed with _) are marked with "# allyas:ignore" to hide from introspection
 
 # Default LLM (can be overridden by ALLYAS_LLM env var)
 : "${ALLYAS_LLM_DEFAULT:=codex}"
 
 # allyas:ignore Map LLM name to actual command with flags
+# Arguments:
+#   $1 - llm_name (codex, claude, gemini)
+#   $2 - (optional) output_file for raw response extraction (only used by codex)
 _llm_get_command() {
   local llm_name="$1"
+  local output_file="$2"
 
   case "$llm_name" in
     codex)
-      echo "codex exec --skip-git-repo-check"
+      # Codex supports --output-last-message to extract clean response
+      if [ -n "$output_file" ]; then
+        echo "codex exec --skip-git-repo-check --output-last-message \"$output_file\" --color never"
+      else
+        echo "codex exec --skip-git-repo-check"
+      fi
       ;;
     claude)
+      # Claude's -p mode outputs just the response (no session markers)
       echo "claude -p"
       ;;
     gemini)
-      echo "gemini -p"
+      # Gemini with JSON output for clean response extraction
+      # Default to gemini-2.5-flash if no model is configured
+      # Note: -o must come before -p, and -p must be last before the prompt
+      echo "gemini -m gemini-2.5-flash -o json -p"
       ;;
     *)
       echo "Error: Unknown LLM '$llm_name'. Supported: codex, claude, gemini" >&2
@@ -44,6 +63,76 @@ _llm_check_installed() {
   return 0
 }
 
+# allyas:ignore Show available LLMs with their installation status
+# Arguments: 
+#   $1 - (optional) "error" to output to stderr and show error context, or empty for normal output
+_llm_show_status() {
+  local mode="${1:-normal}"
+  local current="${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
+  local out_stream=1  # stdout by default
+  
+  # If in error mode, output to stderr
+  if [ "$mode" = "error" ]; then
+    out_stream=2
+  fi
+  
+  {
+    echo ""
+    echo "Available LLMs:"
+    echo ""
+
+    # Check for codex
+    if command -v codex >/dev/null 2>&1; then
+      if [ "$current" = "codex" ]; then
+        if [ "$mode" = "error" ]; then
+          echo "  ✓ codex    (active, but not working)"
+        else
+          echo "  ✓ codex    (active)"
+        fi
+      else
+        echo "  ✓ codex    (installed, use: llm-use codex)"
+      fi
+    else
+      echo "  ✗ codex    (not installed)"
+    fi
+
+    # Check for claude
+    if command -v claude >/dev/null 2>&1; then
+      if [ "$current" = "claude" ]; then
+        if [ "$mode" = "error" ]; then
+          echo "  ✓ claude   (active, but not working)"
+        else
+          echo "  ✓ claude   (active)"
+        fi
+      else
+        echo "  ✓ claude   (installed, use: llm-use claude)"
+      fi
+    else
+      echo "  ✗ claude   (not installed)"
+    fi
+
+    # Check for gemini
+    if command -v gemini >/dev/null 2>&1; then
+      if [ "$current" = "gemini" ]; then
+        if [ "$mode" = "error" ]; then
+          echo "  ✓ gemini   (active, but not working)"
+        else
+          echo "  ✓ gemini   (active)"
+        fi
+      else
+        echo "  ✓ gemini   (installed, use: llm-use gemini)"
+      fi
+    else
+      echo "  ✗ gemini   (not installed)"
+    fi
+
+    echo ""
+    if [ "$mode" != "error" ]; then
+      echo "To switch: llm-use <name>"
+    fi
+  } >&"$out_stream"
+}
+
 # allyas:ignore Helper function to run LLM analysis with instructions and data
 # Usage: result=$(llm_analyze "$instructions" "$data")
 # Returns: LLM output as stdout
@@ -59,13 +148,20 @@ llm_analyze() {
   # Get LLM name (priority: env override, default, fallback)
   local llm_name="${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
 
-  # Map name to command
-  local llm_cmd
-  llm_cmd="$(_llm_get_command "$llm_name")" || return 1
+  # Check if the selected LLM is installed
+  if ! command -v "$llm_name" >/dev/null 2>&1; then
+    echo "Error: LLM tool '$llm_name' is not installed or not in PATH" >&2
+    echo "" >&2
+    echo "Please install an LLM CLI tool or switch to an installed one using 'llm-use'." >&2
+    _llm_show_status "error"
+    return 1
+  fi
 
   # Create temp files
   local prompt_file="$(mktemp /tmp/llm_analyze.XXXXXX)" || return 1
   local output_file="$(mktemp /tmp/llm_analyze.out.XXXXXX)" || return 1
+  local stderr_file="$(mktemp /tmp/llm_analyze.stderr.XXXXXX)" || return 1
+  local response_file="$(mktemp /tmp/llm_analyze.response.XXXXXX)" || return 1
 
   # Build prompt
   cat >"$prompt_file" <<EOF
@@ -76,29 +172,160 @@ DATA:
 $data
 EOF
 
+  # Map name to command with response extraction support
+  local llm_cmd
+  llm_cmd="$(_llm_get_command "$llm_name" "$response_file")" || return 1
+
   # Run LLM
-  $llm_cmd "$(cat "$prompt_file")" >"$output_file" 2>&1
+  # Separate stdout and stderr to properly handle different LLM output formats
+  eval "$llm_cmd" '"$(cat "$prompt_file")"' >"$output_file" 2>"$stderr_file"
   local exit_code=$?
 
   # Check if command failed
   if [ $exit_code -ne 0 ]; then
-    echo "Error: LLM command failed with exit code $exit_code" >&2
-    cat "$output_file" >&2
-    rm -f "$prompt_file" "$output_file"
+    echo "" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "❌ LLM Analysis Failed" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "" >&2
+    echo "Tool: $llm_name" >&2
+    echo "Exit code: $exit_code" >&2
+    echo "" >&2
+    
+    # Show stderr content (usually contains the actual error message)
+    if [ -s "$stderr_file" ]; then
+      echo "Error details:" >&2
+      # Filter out excessive debug logs but keep error messages
+      grep -v "^\[STARTUP\]" "$stderr_file" | head -50 >&2
+    fi
+    
+    # Show stdout if it has error info and stderr was empty
+    if [ ! -s "$stderr_file" ] && [ -s "$output_file" ]; then
+      echo "Error details:" >&2
+      head -50 "$output_file" >&2
+    fi
+    
+    echo "" >&2
+    echo "Suggestions:" >&2
+    echo "  • Check if '$llm_name' is properly configured" >&2
+    echo "  • Verify API credentials and rate limits" >&2
+    echo "  • Try switching to another LLM: llm-list" >&2
+    echo "" >&2
+    
+    rm -f "$prompt_file" "$output_file" "$stderr_file" "$response_file"
     return $exit_code
   fi
 
-  # Output result
-  cat "$output_file"
+  # Extract response based on LLM type
+  local final_response=""
+  local temp_response_file="$(mktemp /tmp/llm_analyze.final.XXXXXX)" || return 1
+  
+  if [ -s "$response_file" ]; then
+    # Codex: uses --output-last-message, response is in response_file
+    cat "$response_file" >"$temp_response_file"
+  elif [ "$llm_name" = "gemini" ]; then
+    # Gemini: uses JSON output format, extract the "response" field
+    if command -v jq >/dev/null 2>&1; then
+      jq -r '.response // empty' "$output_file" 2>/dev/null | \
+        grep -v "^I'm ready for your first command\.$" | \
+        grep -v "^Setup complete\.$" | \
+        grep -v "^Awaiting your first command\.$" >"$temp_response_file"
+      # If jq extraction failed or empty, fall back to text parsing
+      if [ ! -s "$temp_response_file" ]; then
+        cat "$output_file" >"$temp_response_file"
+      fi
+    else
+      # jq not available, just output as-is
+      cat "$output_file" >"$temp_response_file"
+    fi
+  elif [ "$llm_name" = "claude" ]; then
+    # Claude: -p mode outputs response to stdout
+    # But may include debug logs, so we need to filter them out
+    awk '
+      # Skip known debug/startup patterns
+      /^\[STARTUP\]/ { next }
+      /^Loaded cached credentials\.?$/ { next }
+      /^Error when talking to/ { next }
+      /^\[API Error:/ { next }
+      /^An unexpected critical error/ { next }
+      /^Full report available at:/ { next }
+      
+      # Print everything else
+      { print }
+    ' "$output_file" >"$temp_response_file"
+  else
+    # Fallback: try to detect session markers
+    if grep -q "^  user$\|^  assistant$" "$output_file" 2>/dev/null; then
+      # Extract everything after the last "assistant" marker
+      awk '
+        /^  assistant[[:space:]]*$/ { capturing=1; buffer=""; next }
+        capturing { buffer = buffer $0 "\n" }
+        END { 
+          # Remove trailing newline
+          sub(/\n$/, "", buffer)
+          print buffer 
+        }
+      ' "$output_file" >"$temp_response_file"
+    else
+      # No markers, output as-is
+      cat "$output_file" >"$temp_response_file"
+    fi
+  fi
+  
+  # Check for common error patterns in the response
+  final_response="$(cat "$temp_response_file")"
+  
+  if [ -z "$final_response" ]; then
+    echo "" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "❌ LLM returned empty response" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "" >&2
+    echo "Tool: $llm_name" >&2
+    echo "" >&2
+    if [ -s "$stderr_file" ]; then
+      echo "Stderr output:" >&2
+      grep -v "^\[STARTUP\]" "$stderr_file" | head -30 >&2
+      echo "" >&2
+    fi
+    echo "Suggestions:" >&2
+    echo "  • The LLM may have hit rate limits" >&2
+    echo "  • Try again in a few moments" >&2
+    echo "  • Try switching to another LLM: llm-list" >&2
+    echo "" >&2
+    rm -f "$prompt_file" "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
+    return 1
+  fi
+  
+  # Check for rate limit messages in the response
+  if echo "$final_response" | grep -qi "rate limit\|limit reached\|quota exceeded\|too many requests"; then
+    echo "" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "⚠️  LLM Rate Limit Reached" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "" >&2
+    echo "Tool: $llm_name" >&2
+    echo "" >&2
+    echo "$final_response" >&2
+    echo "" >&2
+    echo "Suggestions:" >&2
+    echo "  • Wait for the rate limit to reset" >&2
+    echo "  • Try switching to another LLM: llm-list" >&2
+    echo "" >&2
+    rm -f "$prompt_file" "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
+    return 1
+  fi
+
+  # Output the clean response
+  echo "$final_response"
 
   # Cleanup
-  rm -f "$prompt_file" "$output_file"
+  rm -f "$prompt_file" "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
 
   return 0
 }
 
-# Switch the active LLM for the current shell session
-# Usage: llm-use codex | llm-use claude | llm-use gemini
+# Switch between different LLM providers (codex, claude, gemini)
 llm-use() {
   if [ -z "$1" ]; then
     echo "Current LLM: ${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
@@ -131,46 +358,7 @@ llm-use() {
   echo "✓ LLM switched to: $llm_name"
 }
 
-# List available LLM commands
+# List all available LLM providers and show which one is active
 llm-list() {
-  echo "Available LLMs:"
-  echo ""
-
-  local current="${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
-
-  # Check for codex
-  if command -v codex >/dev/null 2>&1; then
-    if [ "$current" = "codex" ]; then
-      echo "  ✓ codex    (active)"
-    else
-      echo "  ✓ codex    (installed)"
-    fi
-  else
-    echo "  ✗ codex    (not installed)"
-  fi
-
-  # Check for claude
-  if command -v claude >/dev/null 2>&1; then
-    if [ "$current" = "claude" ]; then
-      echo "  ✓ claude   (active)"
-    else
-      echo "  ✓ claude   (installed)"
-    fi
-  else
-    echo "  ✗ claude   (not installed)"
-  fi
-
-  # Check for gemini
-  if command -v gemini >/dev/null 2>&1; then
-    if [ "$current" = "gemini" ]; then
-      echo "  ✓ gemini   (active)"
-    else
-      echo "  ✓ gemini   (installed)"
-    fi
-  else
-    echo "  ✗ gemini   (not installed)"
-  fi
-
-  echo ""
-  echo "To switch: llm-use <name>"
+  _llm_show_status
 }

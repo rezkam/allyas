@@ -5,10 +5,8 @@
 # To use these aliases, add this line to your shell configuration:
 #   [ -f $(brew --prefix)/etc/allyas.sh ] && . $(brew --prefix)/etc/allyas.sh
 
-# Source helper functions
+# Determine helpers directory location
 HELPERS_DIR="$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")/helpers"
-[ -f "$HELPERS_DIR/git.sh" ] && . "$HELPERS_DIR/git.sh"
-[ -f "$HELPERS_DIR/llm.sh" ] && . "$HELPERS_DIR/llm.sh"
 
 # Display all aliases and functions defined in this file
 allyas() {
@@ -729,100 +727,43 @@ Rules:
 SIGNATURE_INFO:
 $(cat "$SIG_FILE")"
 
+  # Run LLM analysis
+  # Note: stdout (markdown) goes to $OUT_MD, stderr (errors) goes to terminal
   if ! llm_analyze "$instructions" "$data" >"$OUT_MD"; then
     FAIL=1
-    echo "Error: LLM analysis failed. Check that your configured LLM is installed and working."
     return 1
   fi
 
+  # Check if we got actual content
+  if [ ! -s "$OUT_MD" ]; then
+    FAIL=1
+    echo ""
+    echo "❌ No analysis output received from LLM"
+    return 1
+  fi
+
+  echo ""
   if command -v glow >/dev/null 2>&1; then
     glow -p "$OUT_MD"
   else
     cat "$OUT_MD"
-    echo "Install glow: brew install glow"
+    echo ""
+    echo "Tip: Install glow for better markdown rendering: brew install glow"
   fi
 }
 
 # ============================================================================
 # LLM Utilities
 # ============================================================================
+# Implementations in helpers/llm.sh
 
 # Switch between different LLM providers (codex, claude, gemini)
-llm-use() {
-  if [ -z "$1" ]; then
-    echo "Current LLM: ${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
-    echo ""
-    echo "Usage: llm-use <llm-name>"
-    echo "Supported LLMs: codex, claude, gemini"
-    echo ""
-    echo "Examples:"
-    echo "  llm-use codex"
-    echo "  llm-use claude"
-    echo "  llm-use gemini"
-    return 0
-  fi
-
-  local llm_name="$1"
-
-  # Validate LLM name
-  if ! _llm_get_command "$llm_name" >/dev/null 2>&1; then
-    echo "Error: Unknown LLM '$llm_name'" >&2
-    echo "Supported: codex, claude, gemini" >&2
-    return 1
-  fi
-
-  # Check if installed
-  if ! _llm_check_installed "$llm_name"; then
-    return 1
-  fi
-
-  export ALLYAS_LLM="$llm_name"
-  echo "✓ LLM switched to: $llm_name"
-}
+# Implemented in: helpers/llm.sh
+llm-use() { :; }
 
 # List all available LLM providers and show which one is active
-llm-list() {
-  echo "Available LLMs:"
-  echo ""
-
-  local current="${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
-
-  # Check for codex
-  if command -v codex >/dev/null 2>&1; then
-    if [ "$current" = "codex" ]; then
-      echo "  ✓ codex    (active)"
-    else
-      echo "  ✓ codex    (installed)"
-    fi
-  else
-    echo "  ✗ codex    (not installed)"
-  fi
-
-  # Check for claude
-  if command -v claude >/dev/null 2>&1; then
-    if [ "$current" = "claude" ]; then
-      echo "  ✓ claude   (active)"
-    else
-      echo "  ✓ claude   (installed)"
-    fi
-  else
-    echo "  ✗ claude   (not installed)"
-  fi
-
-  # Check for gemini
-  if command -v gemini >/dev/null 2>&1; then
-    if [ "$current" = "gemini" ]; then
-      echo "  ✓ gemini   (active)"
-    else
-      echo "  ✓ gemini   (installed)"
-    fi
-  else
-    echo "  ✗ gemini   (not installed)"
-  fi
-
-  echo ""
-  echo "To switch: llm-use <name>"
-}
+# Implemented in: helpers/llm.sh
+llm-list() { :; }
 
 # ============================================================================
 # macOS Specific Aliases
@@ -876,3 +817,10 @@ alias hidefiles='defaults write com.apple.finder AppleShowAllFiles NO; killall F
 
 # Flush DNS cache
 alias flushdns='sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder'
+
+# ============================================================================
+# Load Helper Functions
+# ============================================================================
+# Source helpers AFTER stub definitions so real implementations override stubs
+[ -f "$HELPERS_DIR/git.sh" ] && . "$HELPERS_DIR/git.sh"
+[ -f "$HELPERS_DIR/llm.sh" ] && . "$HELPERS_DIR/llm.sh"
