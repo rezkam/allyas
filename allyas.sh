@@ -543,7 +543,12 @@ portswhy() {
   }
   trap cleanup EXIT
 
-  sudo lsof -iTCP -sTCP:LISTEN -n -P >"$LSOF_FILE" 2>/dev/null
+  if ! sudo lsof -iTCP -sTCP:LISTEN -n -P >"$LSOF_FILE" 2>&1; then
+    FAIL=1
+    echo "Error: Failed to run 'sudo lsof'. Check sudo access and that lsof is installed."
+    return 1
+  fi
+
   if [ ! -s "$LSOF_FILE" ]; then
     echo "No listening TCP ports found."
     return 0
@@ -724,7 +729,11 @@ Rules:
 SIGNATURE_INFO:
 $(cat "$SIG_FILE")"
 
-  llm_analyze "$instructions" "$data" >"$OUT_MD"
+  if ! llm_analyze "$instructions" "$data" >"$OUT_MD"; then
+    FAIL=1
+    echo "Error: LLM analysis failed. Check that your configured LLM is installed and working."
+    return 1
+  fi
 
   if command -v glow >/dev/null 2>&1; then
     glow -p "$OUT_MD"
