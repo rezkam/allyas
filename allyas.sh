@@ -5,6 +5,10 @@
 # To use these aliases, add this line to your shell configuration:
 #   [ -f $(brew --prefix)/etc/allyas.sh ] && . $(brew --prefix)/etc/allyas.sh
 
+# Source helper functions
+HELPERS_DIR="$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")/helpers"
+[ -f "$HELPERS_DIR/llm.sh" ] && . "$HELPERS_DIR/llm.sh"
+
 # Display all aliases and functions defined in this file
 allyas() {
   local source_file=""
@@ -191,7 +195,7 @@ allyas() {
         next
       }
 
-      if (line ~ /^[[:space:]]*[A-Za-z0-9_]+[[:space:]]*\(\)[[:space:]]*{/) {
+      if (line ~ /^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*\(\)[[:space:]]*{/) {
         func_line = line
         sub(/^[[:space:]]*/, "", func_line)
         sub(/\(.*/, "", func_line)
@@ -537,8 +541,8 @@ alias gwtl='git worktree list'
 alias gwtr='git worktree remove'
 
 # Cleanup & Maintenance
-unalias gclean 2>/dev/null || true
 # Remove untracked files and directories with confirmation
+unalias gclean 2>/dev/null || true
 gclean() {
   echo "⚠️  WARNING: This will permanently delete all untracked files and directories!"
   git clean -fd --dry-run
@@ -614,7 +618,313 @@ alias dfs='df -h'
 
 # Network
 alias myip='curl -s ifconfig.me'
-alias ports='sudo lsof -iTCP -sTCP:LISTEN -n -P'
+
+# Show all listening TCP ports (requires sudo to see all processes)
+unalias ports 2>/dev/null || true
+ports() {
+  echo "Requesting sudo access to view all listening TCP ports..."
+  sudo lsof -iTCP -sTCP:LISTEN -n -P
+}
+
+# Analyze listening ports with LLM to identify suspicious processes
+portswhy() {
+  echo "Requesting sudo access to analyze all listening TCP ports..."
+  echo "This is needed to collect process information for security analysis."
+  echo ""
+  LSOF_FILE="$(mktemp /tmp/portswhy.lsof.XXXXXX)" || return 1
+  PIDS_FILE="$(mktemp /tmp/portswhy.pids.XXXXXX)" || return 1
+  PS_FILE="$(mktemp /tmp/portswhy.ps.XXXXXX)" || return 1
+  DATA_FILE="$(mktemp /tmp/portswhy.data.XXXXXX)" || return 1
+  SIG_FILE="$(mktemp /tmp/portswhy.sig.XXXXXX)" || return 1
+  OUT_MD="$(mktemp /tmp/portswhy.out.XXXXXX).md" || return 1
+
+  FAIL=0
+  cleanup() {
+    if [ "$FAIL" -eq 0 ]; then
+      rm -f "$LSOF_FILE" "$PIDS_FILE" "$PS_FILE" "$DATA_FILE" "$SIG_FILE" "$OUT_MD"
+    else
+      echo "Kept debug files:"
+      echo "  lsof  : $LSOF_FILE"
+      echo "  pids  : $PIDS_FILE"
+      echo "  ps    : $PS_FILE"
+      echo "  data  : $DATA_FILE"
+      echo "  sig   : $SIG_FILE"
+      echo "  out   : $OUT_MD"
+    fi
+  }
+  trap cleanup EXIT
+
+  sudo lsof -iTCP -sTCP:LISTEN -n -P >"$LSOF_FILE" 2>/dev/null
+  if [ ! -s "$LSOF_FILE" ]; then
+    echo "No listening TCP ports found."
+    return 0
+  fi
+
+  awk 'NR>1 && $2 ~ /^[0-9]+$/ {print $2}' "$LSOF_FILE" | sort -n | uniq >"$PIDS_FILE"
+  if [ ! -s "$PIDS_FILE" ]; then
+    FAIL=1
+    echo "Failed to extract numeric PIDs from lsof."
+    sed -n '1,25p' "$LSOF_FILE"
+    return 1
+  fi
+
+  PID_CSV="$(tr -d '\r' <"$PIDS_FILE" | tr '\n' ',' | sed 's/,$//')"
+  if ! printf "%s" "$PID_CSV" | grep -Eq '^[0-9]+(,[0-9]+)*$'; then
+    FAIL=1
+    echo "PID list corrupted: $PID_CSV"
+    echo "Inspect: $PIDS_FILE"
+    return 1
+  fi
+
+  ps -p "$PID_CSV" -o pid=,ppid=,user=,start=,etime=,%cpu=,%mem=,comm=,command= 2>/dev/null \
+    | awk '
+        {
+          pid=$1; ppid=$2; user=$3; start=$4; etime=$5; cpu=$6; mem=$7; comm=$8
+          $1=$2=$3=$4=$5=$6=$7=$8=""
+          sub(/^[ \t]+/, "")
+          cmd=$0
+          printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", pid, ppid, user, start, etime, cpu, mem, comm, cmd
+        }
+      ' >"$PS_FILE"
+
+  if [ ! -s "$PS_FILE" ]; then
+    FAIL=1
+    echo "ps output empty."
+    echo "PID_CSV was: $PID_CSV"
+    return 1
+  fi
+
+  awk -F'\t' -v PIDS_FILE="$PIDS_FILE" '
+    FNR==NR {
+      pid=$1
+      ppid[pid]=$2; user[pid]=$3; start[pid]=$4; etime[pid]=$5; cpu[pid]=$6; mem[pid]=$7
+      comm[pid]=$8; cmd[pid]=$9
+
+      exec=cmd[pid]; sub(/[[:space:]].*$/, "", exec); exe[pid]=exec
+
+      app="(none)"
+      if (match(cmd[pid], /\/Applications\/[^\/]+\.app/)) app=substr(cmd[pid], RSTART, RLENGTH)
+      appb[pid]=app
+      next
+    }
+    FNR==1 { next }
+    {
+      n = split($0, f, /[ \t]+/)
+      if (f[2] !~ /^[0-9]+$/) next
+
+      pid = f[2]
+      addr = f[9]
+
+      gsub(/^TCP:/, "", addr)
+      gsub(/^UDP:/, "", addr)
+      gsub(/[[:space:]]+/, "", addr)
+
+      if (addr != "" && addr != "TCP" && addr != "UDP" && addr != "(LISTEN)") {
+        listen[pid]=(listen[pid]?listen[pid]","addr:addr)
+      }
+    }
+    END {
+      print "MACOS_LISTENERS|src=lsof+ps"
+      while ((getline p < PIDS_FILE) > 0) {
+        if (p ~ /^[0-9]+$/) {
+          lp = (listen[p]?listen[p]:"unknown")
+          printf "### pid=%s ppid=%s user=%s start=%s etime=%s cpu=%s mem=%s comm=%s exec=%s app=%s listen=%s cmd=%s\n",
+            p,
+            (ppid[p]?ppid[p]:"unknown"),
+            (user[p]?user[p]:"unknown"),
+            (start[p]?start[p]:"unknown"),
+            (etime[p]?etime[p]:"unknown"),
+            (cpu[p]?cpu[p]:"unknown"),
+            (mem[p]?mem[p]:"unknown"),
+            (comm[p]?comm[p]:"unknown"),
+            (exe[p]?exe[p]:"unknown"),
+            (appb[p]?appb[p]:"(none)"),
+            lp,
+            (cmd[p]?cmd[p]:"unknown")
+        }
+      }
+      close(PIDS_FILE)
+    }
+  ' "$PS_FILE" "$LSOF_FILE" >"$DATA_FILE"
+
+  if ! grep -q '^### pid=' "$DATA_FILE"; then
+    FAIL=1
+    echo "DATA build failed."
+    echo "First 30 lines of lsof:"
+    sed -n '1,30p' "$LSOF_FILE"
+    echo "First 30 lines of ps:"
+    sed -n '1,30p' "$PS_FILE"
+    echo "First 30 lines of data:"
+    sed -n '1,30p' "$DATA_FILE"
+    return 1
+  fi
+
+  : >"$SIG_FILE"
+  awk '
+    /^### / {
+      app=""; exec=""
+
+      if (match($0, /app=(\/[^ ]+( [^ ]+)*\.app)( |$)/, arr)) {
+        app = arr[1]
+      } else if (match($0, / app=([^ ]+)/, arr)) {
+        app = arr[1]
+      }
+
+      if (match($0, /exec=(\/[^ ]+( [^ ]+)*\.app)( |$)/, arr)) {
+        exec = arr[1]
+      } else if (match($0, / exec=([^ ]+)/, arr)) {
+        exec = arr[1]
+      }
+
+      t=app
+      if (t=="" || t=="(none)") t=exec
+      if (t ~ /^\//) print t
+    }
+  ' "$DATA_FILE" | sort -u | head -n 30 | while IFS= read -r target; do
+    ident="$(codesign -dv --verbose=4 "$target" 2>&1 | awk -F= "/^Identifier=/ {print \$2; exit}")"
+    team="$(codesign -dv --verbose=4 "$target" 2>&1 | awk -F= "/^TeamIdentifier=/ {print \$2; exit}")"
+    auth="$(codesign -dv --verbose=4 "$target" 2>&1 | awk -F= "/^Authority=/ {print \$2; exit}")"
+    [ -z "$ident" ] && ident="unknown"
+    [ -z "$team" ] && team="unknown"
+    [ -z "$auth" ] && auth="unknown"
+    printf "SIG target=%s identifier=%s team=%s authority=%s\n" "$target" "$ident" "$team" "$auth" >>"$SIG_FILE"
+  done
+
+  local instructions='Output Markdown only.
+Do not repeat the prompt. Do not explain methodology.
+Do not run, suggest running, or simulate any shell commands.
+
+Use only DATA + SIGNATURE_INFO + general knowledge.
+
+When legitimacy cannot be determined from signature data alone (unknown signatures, unfamiliar vendors, suspicious patterns),
+you SHOULD use web search to validate the TeamIdentifier, Authority, and bundle identifier.
+State "verified via web search: [brief finding]" when you use it, or "legitimacy unclear - recommend investigation" if web search is unavailable or inconclusive.
+
+Important:
+- Start with suspicious or unusual listeners first, then normal ones.
+- If listen=unknown for a PID, you MUST NOT claim it is "not suspicious" based on ports, because ports are missing.
+  Instead say "listen address cannot be determined from provided data" and base suspicion only on app/cmd/signature context.
+- Do not be short. Be concrete and cite fields (app, exec, cmd, ppid, user, listen, signature lines).
+
+Output format (no tables):
+## 🚨 Suspicious or Unusual Listening Processes
+For each suspicious PID:
+### PID <pid> <app-or-exec>
+- Listen: <listen>
+- Category: <category>
+- What it is:
+- Evidence (from fields):
+- Legitimacy (from signatures and optionally web):
+- Notes:
+
+If none are suspicious, write exactly: "No suspicious listeners detected." (but only if listen values are present and nothing looks odd)
+
+## ✅ Normal / Expected Listening Processes
+Same per-PID blocks, shorter than suspicious blocks but still specific.
+
+Categories: system | third-party | dev-tool | suspicious
+Rules:
+- Use listen= exactly (no invented ranges)
+- Prefer app= for the displayed name when present, else exec=
+- If you cannot prove something, say "cannot be determined from provided data"'
+
+  local data
+  data="$(cat "$DATA_FILE")"
+  data="$data
+
+SIGNATURE_INFO:
+$(cat "$SIG_FILE")"
+
+  llm_analyze "$instructions" "$data" >"$OUT_MD"
+
+  if command -v glow >/dev/null 2>&1; then
+    glow -p "$OUT_MD"
+  else
+    cat "$OUT_MD"
+    echo "Install glow: brew install glow"
+  fi
+}
+
+# ============================================================================
+# LLM Utilities
+# ============================================================================
+
+# Switch between different LLM providers (codex, claude, gemini)
+llm-use() {
+  if [ -z "$1" ]; then
+    echo "Current LLM: ${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
+    echo ""
+    echo "Usage: llm-use <llm-name>"
+    echo "Supported LLMs: codex, claude, gemini"
+    echo ""
+    echo "Examples:"
+    echo "  llm-use codex"
+    echo "  llm-use claude"
+    echo "  llm-use gemini"
+    return 0
+  fi
+
+  local llm_name="$1"
+
+  # Validate LLM name
+  if ! _llm_get_command "$llm_name" >/dev/null 2>&1; then
+    echo "Error: Unknown LLM '$llm_name'" >&2
+    echo "Supported: codex, claude, gemini" >&2
+    return 1
+  fi
+
+  # Check if installed
+  if ! _llm_check_installed "$llm_name"; then
+    return 1
+  fi
+
+  export ALLYAS_LLM="$llm_name"
+  echo "✓ LLM switched to: $llm_name"
+}
+
+# List all available LLM providers and show which one is active
+llm-list() {
+  echo "Available LLMs:"
+  echo ""
+
+  local current="${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
+
+  # Check for codex
+  if command -v codex >/dev/null 2>&1; then
+    if [ "$current" = "codex" ]; then
+      echo "  ✓ codex    (active)"
+    else
+      echo "  ✓ codex    (installed)"
+    fi
+  else
+    echo "  ✗ codex    (not installed)"
+  fi
+
+  # Check for claude
+  if command -v claude >/dev/null 2>&1; then
+    if [ "$current" = "claude" ]; then
+      echo "  ✓ claude   (active)"
+    else
+      echo "  ✓ claude   (installed)"
+    fi
+  else
+    echo "  ✗ claude   (not installed)"
+  fi
+
+  # Check for gemini
+  if command -v gemini >/dev/null 2>&1; then
+    if [ "$current" = "gemini" ]; then
+      echo "  ✓ gemini   (active)"
+    else
+      echo "  ✓ gemini   (installed)"
+    fi
+  else
+    echo "  ✗ gemini   (not installed)"
+  fi
+
+  echo ""
+  echo "To switch: llm-use <name>"
+}
 
 # ============================================================================
 # macOS Specific Aliases
