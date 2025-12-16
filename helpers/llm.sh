@@ -67,10 +67,6 @@ llm_analyze() {
   local prompt_file="$(mktemp /tmp/llm_analyze.XXXXXX)" || return 1
   local output_file="$(mktemp /tmp/llm_analyze.out.XXXXXX)" || return 1
 
-  # Cleanup on exit
-  local cleanup_files="$prompt_file $output_file"
-  trap 'rm -f $cleanup_files' RETURN
-
   # Build prompt
   cat >"$prompt_file" <<EOF
 INSTRUCTIONS:
@@ -88,11 +84,15 @@ EOF
   if [ $exit_code -ne 0 ]; then
     echo "Error: LLM command failed with exit code $exit_code" >&2
     cat "$output_file" >&2
+    rm -f "$prompt_file" "$output_file"
     return $exit_code
   fi
 
   # Output result
   cat "$output_file"
+
+  # Cleanup
+  rm -f "$prompt_file" "$output_file"
 
   return 0
 }
