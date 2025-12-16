@@ -642,6 +642,23 @@ cpf() {
   echo "Copied: $(pbpaste)"
 }
 
+# Copy file contents to clipboard
+ccopy() {
+  if [ -z "$1" ]; then
+    echo "Usage: ccopy <file>"
+    echo "Copies the contents of the file to clipboard"
+    return 1
+  fi
+
+  if [ ! -f "$1" ]; then
+    echo "Error: '$1' is not a file or does not exist"
+    return 1
+  fi
+
+  cat "$1" | pbcopy
+  echo "Copied contents of: $1"
+}
+
 # Finder shortcuts
 alias o='open .'  # Open current directory in Finder
 
