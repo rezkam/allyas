@@ -6,7 +6,22 @@
 #   [ -f $(brew --prefix)/etc/allyas.sh ] && . $(brew --prefix)/etc/allyas.sh
 
 # Determine helpers directory location
-HELPERS_DIR="$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")/helpers"
+# Resolve symlinks to find the actual installation directory
+if [ -n "${BASH_SOURCE:-}" ]; then
+  _allyas_source="${BASH_SOURCE[0]}"
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  eval '_allyas_source="${(%):-%x}"'
+else
+  _allyas_source="$0"
+fi
+
+# Resolve symlink to real path
+if [ -L "$_allyas_source" ]; then
+  _allyas_source="$(readlink "$_allyas_source")"
+fi
+
+HELPERS_DIR="$(dirname "$_allyas_source")/helpers"
+unset _allyas_source
 
 # Display all aliases and functions defined in this file
 allyas() {
