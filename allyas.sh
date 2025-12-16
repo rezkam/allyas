@@ -17,10 +17,16 @@ fi
 
 # Resolve symlink to real path
 if [ -L "$_allyas_source" ]; then
-  _allyas_source="$(readlink "$_allyas_source")"
+  _allyas_link_target="$(readlink "$_allyas_source")"
+  # If readlink returns a relative path, make it absolute
+  case "$_allyas_link_target" in
+    /*) _allyas_source="$_allyas_link_target" ;;
+    *)  _allyas_source="$(dirname "$_allyas_source")/$_allyas_link_target" ;;
+  esac
+  unset _allyas_link_target
 fi
 
-HELPERS_DIR="$(dirname "$_allyas_source")/helpers"
+HELPERS_DIR="$(cd "$(dirname "$_allyas_source")" && pwd)/helpers"
 unset _allyas_source
 
 # Display all aliases and functions defined in this file
