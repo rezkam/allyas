@@ -10,6 +10,15 @@
 # Default LLM (can be overridden by ALLYAS_LLM env var)
 : "${ALLYAS_LLM_DEFAULT:=codex}"
 
+# Model overrides (can be set via environment variables)
+# Examples:
+#   export ALLYAS_CODEX_MODEL="gpt-4o"
+#   export ALLYAS_CLAUDE_MODEL="sonnet"
+#   export ALLYAS_GEMINI_MODEL="gemini-2.0-flash-exp"
+: "${ALLYAS_CODEX_MODEL:=gpt-5-codex}"
+: "${ALLYAS_CLAUDE_MODEL:=haiku}"
+: "${ALLYAS_GEMINI_MODEL:=gemini-2.5-flash}"
+
 # allyas:ignore Map LLM name to actual command with flags
 # Arguments:
 #   $1 - llm_name (codex, claude, gemini)
@@ -21,21 +30,26 @@ _llm_get_command() {
   case "$llm_name" in
     codex)
       # Codex supports --output-last-message to extract clean response
+      # Model can be overridden with ALLYAS_CODEX_MODEL env var
+      local model="${ALLYAS_CODEX_MODEL}"
       if [ -n "$output_file" ]; then
-        echo "codex exec --skip-git-repo-check --output-last-message \"$output_file\" --color never"
+        echo "codex exec --skip-git-repo-check -m \"$model\" --output-last-message \"$output_file\" --color never"
       else
-        echo "codex exec --skip-git-repo-check"
+        echo "codex exec --skip-git-repo-check -m \"$model\""
       fi
       ;;
     claude)
       # Claude's -p mode outputs just the response (no session markers)
-      echo "claude -p"
+      # Model can be overridden with ALLYAS_CLAUDE_MODEL env var (haiku, sonnet, opus)
+      local model="${ALLYAS_CLAUDE_MODEL}"
+      echo "claude --model \"$model\" -p"
       ;;
     gemini)
       # Gemini with JSON output for clean response extraction
-      # Default to gemini-2.5-flash if no model is configured
+      # Model can be overridden with ALLYAS_GEMINI_MODEL env var
       # Note: -o must come before -p, and -p must be last before the prompt
-      echo "gemini -m gemini-2.5-flash -o json -p"
+      local model="${ALLYAS_GEMINI_MODEL}"
+      echo "gemini -m \"$model\" -o json -p"
       ;;
     *)
       echo "Error: Unknown LLM '$llm_name'. Supported: codex, claude, gemini" >&2
@@ -85,12 +99,12 @@ _llm_show_status() {
     if command -v codex >/dev/null 2>&1; then
       if [ "$current" = "codex" ]; then
         if [ "$mode" = "error" ]; then
-          echo "  ✓ codex    (active, but not working)"
+          echo "  ✓ codex    (active, but not working) - model: ${ALLYAS_CODEX_MODEL}"
         else
-          echo "  ✓ codex    (active)"
+          echo "  ✓ codex    (active) - model: ${ALLYAS_CODEX_MODEL}"
         fi
       else
-        echo "  ✓ codex    (installed, use: llm-use codex)"
+        echo "  ✓ codex    (installed, use: llm-use codex) - model: ${ALLYAS_CODEX_MODEL}"
       fi
     else
       echo "  ✗ codex    (not installed)"
@@ -100,12 +114,12 @@ _llm_show_status() {
     if command -v claude >/dev/null 2>&1; then
       if [ "$current" = "claude" ]; then
         if [ "$mode" = "error" ]; then
-          echo "  ✓ claude   (active, but not working)"
+          echo "  ✓ claude   (active, but not working) - model: ${ALLYAS_CLAUDE_MODEL}"
         else
-          echo "  ✓ claude   (active)"
+          echo "  ✓ claude   (active) - model: ${ALLYAS_CLAUDE_MODEL}"
         fi
       else
-        echo "  ✓ claude   (installed, use: llm-use claude)"
+        echo "  ✓ claude   (installed, use: llm-use claude) - model: ${ALLYAS_CLAUDE_MODEL}"
       fi
     else
       echo "  ✗ claude   (not installed)"
@@ -115,12 +129,12 @@ _llm_show_status() {
     if command -v gemini >/dev/null 2>&1; then
       if [ "$current" = "gemini" ]; then
         if [ "$mode" = "error" ]; then
-          echo "  ✓ gemini   (active, but not working)"
+          echo "  ✓ gemini   (active, but not working) - model: ${ALLYAS_GEMINI_MODEL}"
         else
-          echo "  ✓ gemini   (active)"
+          echo "  ✓ gemini   (active) - model: ${ALLYAS_GEMINI_MODEL}"
         fi
       else
-        echo "  ✓ gemini   (installed, use: llm-use gemini)"
+        echo "  ✓ gemini   (installed, use: llm-use gemini) - model: ${ALLYAS_GEMINI_MODEL}"
       fi
     else
       echo "  ✗ gemini   (not installed)"
@@ -128,7 +142,12 @@ _llm_show_status() {
 
     echo ""
     if [ "$mode" != "error" ]; then
-      echo "To switch: llm-use <name>"
+      echo "To switch LLM: llm-use <name>"
+      echo ""
+      echo "To change models, set environment variables:"
+      echo "  export ALLYAS_CODEX_MODEL=\"gpt-4o\""
+      echo "  export ALLYAS_CLAUDE_MODEL=\"sonnet\""
+      echo "  export ALLYAS_GEMINI_MODEL=\"gemini-2.0-flash-exp\""
     fi
   } >&"$out_stream"
 }
@@ -228,6 +247,7 @@ EOF
     if command -v jq >/dev/null 2>&1; then
       jq -r '.response // empty' "$output_file" 2>/dev/null | \
         grep -v "^I'm ready for your first command\.$" | \
+        grep -v "^OK\. I'm ready for your first command\.$" | \
         grep -v "^Setup complete\.$" | \
         grep -v "^Awaiting your first command\.$" >"$temp_response_file"
       # If jq extraction failed or empty, fall back to text parsing

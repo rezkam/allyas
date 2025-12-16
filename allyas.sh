@@ -518,6 +518,7 @@ portswhy() {
   echo "Requesting sudo access to analyze all listening TCP ports..."
   echo "This is needed to collect process information for security analysis."
   echo ""
+  echo "🔍 Scanning listening ports..."
   LSOF_FILE="$(mktemp /tmp/portswhy.lsof.XXXXXX)" || return 1
   PIDS_FILE="$(mktemp /tmp/portswhy.pids.XXXXXX)" || return 1
   PS_FILE="$(mktemp /tmp/portswhy.ps.XXXXXX)" || return 1
@@ -651,6 +652,7 @@ portswhy() {
     return 1
   fi
 
+  echo "🔐 Checking code signatures..."
   : >"$SIG_FILE"
   awk '
     /^### / {
@@ -727,6 +729,7 @@ Rules:
 SIGNATURE_INFO:
 $(cat "$SIG_FILE")"
 
+  echo "🤖 Analyzing with LLM (${ALLYAS_LLM:-codex})..."
   # Run LLM analysis
   # Note: stdout (markdown) goes to $OUT_MD, stderr (errors) goes to terminal
   if ! llm_analyze "$instructions" "$data" >"$OUT_MD"; then
