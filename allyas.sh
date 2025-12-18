@@ -282,15 +282,6 @@ alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
 
-# Safety nets (only in interactive shells to avoid breaking automation)
-case $- in
-  *i*)
-    alias rm='rm -i'
-    alias cp='cp -i'
-    alias mv='mv -i'
-    ;;
-esac
-
 # Grep
 alias grep='grep --color=auto'  # Colorize grep output
 
