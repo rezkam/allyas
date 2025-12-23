@@ -1,4 +1,7 @@
-# LLM Helper Functions
+# ============================================================================
+# LLM Utilities
+# ============================================================================
+#
 # Provides reusable functions for LLM-based analysis commands
 #
 # Architecture:

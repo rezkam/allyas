@@ -48,223 +48,134 @@ allyas() {
     return 1
   fi
 
-  awk -f /dev/stdin "$source_file" <<'AWK'
-    function trim(s) {
-      sub(/^[[:space:]]+/, "", s)
-      sub(/[[:space:]]+$/, "", s)
-      return s
-    }
+  local files_to_scan=("$source_file")
+  if [ -d "$HELPERS_DIR" ]; then
+    for helper_file in "$HELPERS_DIR"/*.sh; do
+      if [ -f "$helper_file" ]; then
+        files_to_scan+=("$helper_file")
+      fi
+    done
+  fi
 
-    function strip_quotes(s) {
-      s = trim(s)
-      if (length(s) >= 2) {
-        first = substr(s, 1, 1)
-        last = substr(s, length(s), 1)
-        if ((first == "\"" && last == "\"") || (first == "'" && last == "'")) {
-          s = substr(s, 2, length(s) - 2)
-        }
-      }
-      return s
-    }
-
+  awk -f /dev/stdin "${files_to_scan[@]}" <<'AWK'
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function strip_quotes(s) { s = trim(s); if (length(s) >= 2 && ((substr(s, 1, 1) == "'" && substr(s, length(s)) == "'") || (substr(s, 1, 1) == "\"" && substr(s, length(s)) == "\""))) { s = substr(s, 2, length(s) - 2) }; return s }
     function add_entry(type, text, desc, extra) {
-      entry_count++
-      entry_type[entry_count] = type
-      entry_text[entry_count] = text
-      entry_desc[entry_count] = desc
-      entry_extra[entry_count] = extra
-      if (type == "alias" || type == "function") {
-        current_length = length(text)
-        if (current_length > max_name_width) {
-          max_name_width = current_length
+        if (text ~ /^_/) return;
+        entry_count++;
+        entry_type[entry_count] = type;
+        entry_text[entry_count] = text;
+        entry_desc[entry_count] = desc;
+        entry_extra[entry_count] = extra;
+        if (type == "alias" || type == "function") {
+            if (length(text) > max_name_width) max_name_width = length(text);
         }
-      }
     }
-
-    function flush_heading() {
-      if (pending_heading == "") {
-        return
-      }
-      n = split(pending_heading, lines, "\n")
-      for (i = 1; i <= n; i++) {
-        add_entry("heading", lines[i], "", "")
-      }
-      pending_heading = ""
-    }
-
-    function show_alias(name, command, desc) {
-      add_entry("alias", name, desc, command)
-    }
-
-    function show_function(name, desc) {
-      add_entry("function", name, desc, "")
-    }
-
-    BEGIN {
-      section = ""
-      pending_heading = ""
-      next_section = 0
-      started = 0
-      in_heredoc = 0
-      heredoc_end = ""
-      skip_next_function = 0
-      skip_separator = 0
-      entry_count = 0
-      max_name_width = 0
-      function_depth = 0
-    }
-
+    BEGIN { max_name_width = 0; entry_count = 0; pending_comment = ""; next_is_section = 0; function_depth = 0; in_heredoc = 0; skip_next = 0; }
     {
-      line = $0
-      trimmed = line
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", trimmed)
-
-      if (in_heredoc) {
-        if (trimmed == heredoc_end) {
-          in_heredoc = 0
+        if (in_heredoc) {
+            if ($0 == "AWK") {
+                in_heredoc = 0;
+            }
+            next;
         }
-        next
-      }
+        if ($0 ~ /<<'AWK'/) {
+            in_heredoc = 1;
+            next;
+        }
 
-      if (!in_heredoc && line ~ /<<'AWK'/) {
-        in_heredoc = 1
-        heredoc_end = "AWK"
-        next
-      }
-
-      if (!in_heredoc && line ~ /^[[:space:]]*}[[:space:]]*$/) {
         if (function_depth > 0) {
-          function_depth--
+            function_depth += gsub(/{/, "{", $0) - gsub(/}/, "}", $0);
+            if (function_depth <= 0) function_depth = 0;
+            next;
         }
-        pending_heading = ""
-        next
-      }
 
-      if (function_depth > 0) {
-        next
-      }
+        if (next_is_section) {
+            next_is_section = 0;
+            if ($0 ~ /^#[[:space:]]*/ && !($0 ~ /^#[[:space:]]*=+/)) {
+                section = $0;
+                sub(/^#[[:space:]]*/, "", section);
+                section = trim(section);
+                if (section != "") { add_entry("section", section) }
+            }
+        }
+        if ($0 ~ /^#[[:space:]]*=+/) {
+            next_is_section = 1;
+            pending_comment = "";
+            next;
+        }
 
-      if (line ~ /^#[[:space:]]*=+/) {
-        if (skip_separator) {
-          skip_separator = 0
-          next
-        }
-        next_section = 1
-        pending_heading = ""
-        next
-      }
+        if (trim($0) == "") { pending_comment = ""; next }
 
-      if (next_section && line ~ /^#[[:space:]]*/) {
-        section = line
-        sub(/^#[[:space:]]*/, "", section)
-        section = trim(section)
-        if (section != "") {
-          add_entry("section", section, "", "")
-          started = 1
-          skip_separator = 1
+        if ($0 ~ /^[[:space:]]*#/) {
+            comment = $0;
+            sub(/^#[[:space:]]*/, "", comment);
+            comment = trim(comment);
+            if (comment ~ /allyas:ignore/) {
+                skip_next = 1;
+                pending_comment = "";
+                next;
+            }
+            if (comment ~ /^--/) {
+                sub(/^--[[:space:]]*/, "", comment);
+                add_entry("heading", trim(comment));
+                pending_comment = "";
+                next;
+            }
+            pending_comment = (pending_comment == "") ? comment : pending_comment "\n" comment;
+            next;
         }
-        next_section = 0
-        pending_heading = ""
-        next
-      }
 
-      if (!started) {
-        next
-      }
+        if (skip_next) {
+            skip_next = 0;
+            pending_comment = "";
+            next;
+        }
 
-      if (trimmed == "") {
-        pending_heading = ""
-        next
-      }
+        is_alias = ($0 ~ /^[[:space:]]*alias[[:space:]]+/);
+        is_function = ($0 ~ /^[[:space:]]*[a-zA-Z0-9_-]+[[:space:]]*\(\)[[:space:]]*{/);
 
-      if (line ~ /^[[:space:]]*#/) {
-        comment = line
-        sub(/^#[[:space:]]*/, "", comment)
-        comment = trim(comment)
-        if (comment ~ /allyas:ignore/) {
-          skip_next_function = 1
-          next
-        }
-        if (comment != "") {
-          if (pending_heading != "") {
-            flush_heading()
-          }
-          pending_heading = comment
-        }
-        next
-      }
+        if (is_alias) {
+            name = $0; sub(/.*alias[[:space:]]+/, "", name); sub(/=.*/, "", name); name = trim(name);
+            command = $0; sub(/.*=/, "", command);
+            inline_comment = "";
+            if (match(command, /[[:space:]]#[[:space:]]+(.+)/, m)) {
+                inline_comment = trim(m[1]);
+                sub(/[[:space:]]#[[:space:]]+.*/, "", command);
+            }
+            command = strip_quotes(trim(command));
+            desc = pending_comment != "" ? pending_comment : (inline_comment != "" ? inline_comment : command);
+            add_entry("alias", name, desc, command);
+        } else if (is_function) {
+            if ($0 ~ /\(\)[[:space:]]*{[[:space:]]*:;[[:space:]]*}[[:space:]]*$/) { pending_comment = ""; next }
+            name = $0; sub(/[[:space:]]*\(\).*/, "", name); name = trim(name);
+            desc = pending_comment != "" ? pending_comment : "Shell function";
+            add_entry("function", name, desc);
 
-      if (line ~ /^[[:space:]]*alias[[:space:]]+/) {
-        alias_line = line
-        sub(/^[[:space:]]*alias[[:space:]]+/, "", alias_line)
-        eq = index(alias_line, "=")
-        if (eq <= 0) {
-          next
+            local_depth = gsub(/{/, "{", $0) - gsub(/}/, "}", $0);
+            if (local_depth > 0) {
+                function_depth = local_depth;
+            }
         }
-        name = trim(substr(alias_line, 1, eq - 1))
-        rest = substr(alias_line, eq + 1)
-        desc = ""
-        hash = index(rest, "#")
-        if (hash > 0) {
-          desc = trim(substr(rest, hash + 1))
-          rest = substr(rest, 1, hash - 1)
-        }
-        command = strip_quotes(rest)
-        command = trim(command)
-        show_alias(name, command, desc)
-        next
-      }
-
-      if (line ~ /^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*\(\)[[:space:]]*{/) {
-        func_line = line
-        sub(/^[[:space:]]*/, "", func_line)
-        sub(/\(.*/, "", func_line)
-        name = trim(func_line)
-        desc = pending_heading
-        if (desc == "") {
-          desc = "Shell function"
-        }
-        if (!(name ~ /^_/ || skip_next_function)) {
-          show_function(name, desc)
-        }
-        pending_heading = ""
-        skip_next_function = 0
-        function_depth++
-        next
-      }
+        pending_comment = "";
     }
-
     END {
-      if (max_name_width < 1) {
-        max_name_width = 1
-      }
-      item_format = sprintf("  %%-%ds  %%s", max_name_width)
-      spaced = 0
-      for (i = 1; i <= entry_count; i++) {
-        type = entry_type[i]
-        text = entry_text[i]
-        desc = entry_desc[i]
-        extra = entry_extra[i]
-        if (type == "section") {
-          if (spaced) {
-            print ""
-          }
-          print text
-          spaced = 1
-        } else if (type == "heading") {
-          print "  " text
-        } else if (type == "alias") {
-          display = extra
-          if (desc != "") {
-            display = desc
-          }
-          print sprintf(item_format, text, display)
-        } else if (type == "function") {
-          print sprintf(item_format, text, desc)
+        if (max_name_width < 1) max_name_width = 1;
+        item_format = sprintf("  %%-%ds  ", max_name_width);
+        for (i = 1; i <= entry_count; i++) {
+            type = entry_type[i]; text = entry_text[i]; desc = entry_desc[i];
+            if (type == "section") {
+                if (i > 1) print "";
+                print text;
+            } else if (type == "heading") {
+                print "  " text;
+            } else if (type == "alias" || type == "function") {
+                n = split(desc, lines, "\n");
+                printf item_format, text; print lines[1];
+                for (j = 2; j <= n; j++) { printf item_format, ""; print lines[j]; }
+            }
         }
-      }
     }
-
 AWK
 }
 
@@ -301,7 +212,7 @@ alias cdtemp='cd $(mktemp -d)'  # Create and cd to temp directory
 # Git Aliases
 # ============================================================================
 
-# Status & Info
+#-- Status & Info
 alias gis='git status'
 alias gisb='git status -sb'                    # Short branch status
 alias gib='git branch'
@@ -309,7 +220,7 @@ alias giba='git branch -a'                     # Show all branches (local + remo
 alias gibd='git branch -d'                     # Delete branch (safe)
 alias gibD='git branch -D'                     # Force delete branch
 
-# Log & History
+#-- Log & History
 alias gil='git log'
 alias gilog='git log --oneline --graph --decorate --all'
 alias gilp='git log -p'                        # Log with patches
@@ -317,7 +228,7 @@ alias gils='git log --stat'                    # Log with file stats
 alias gilg='git log --graph --oneline --all'   # Visual branch graph
 alias gilast='git log -1 HEAD --stat'          # Show last commit
 
-# Add & Commit
+#-- Add & Commit
 alias gia='git add .'
 alias giaa='git add --all'
 alias giap='git add -p'                        # Interactive staging
@@ -326,13 +237,13 @@ alias gima='git commit -am'                    # Add all and commit
 alias gimend='git commit --amend'              # Amend last commit
 alias gimendn='git commit --amend --no-edit'   # Amend without changing message
 
-# Diff
+#-- Diff
 alias gif='git diff'
 alias giff='git diff --cached'                 # Diff of staged changes
 alias gifw='git diff --word-diff'              # Word-level diff
 alias gifn='git diff --name-only'              # Show only file names
 
-# Push & Pull
+#-- Push & Pull
 # Push current branch to its configured remote
 gush() {
   push_current_branch
@@ -833,9 +744,6 @@ alias hidefiles='defaults write com.apple.finder AppleShowAllFiles NO; killall F
 # Flush DNS cache
 alias flushdns='sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder'
 
-# ============================================================================
-# Load Helper Functions
-# ============================================================================
 # Source helpers AFTER stub definitions so real implementations override stubs
 [ -f "$HELPERS_DIR/git.sh" ] && . "$HELPERS_DIR/git.sh"
 [ -f "$HELPERS_DIR/llm.sh" ] && . "$HELPERS_DIR/llm.sh"
