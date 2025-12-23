@@ -744,9 +744,6 @@ alias hidefiles='defaults write com.apple.finder AppleShowAllFiles NO; killall F
 # Flush DNS cache
 alias flushdns='sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder'
 
-# ============================================================================
-# Load Helper Functions
-# ============================================================================
 # Source helpers AFTER stub definitions so real implementations override stubs
 [ -f "$HELPERS_DIR/git.sh" ] && . "$HELPERS_DIR/git.sh"
 [ -f "$HELPERS_DIR/llm.sh" ] && . "$HELPERS_DIR/llm.sh"
