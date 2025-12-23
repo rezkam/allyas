@@ -61,41 +61,83 @@ allyas() {
     function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
     function strip_quotes(s) { s = trim(s); if (length(s) >= 2 && ((substr(s, 1, 1) == "'" && substr(s, length(s)) == "'") || (substr(s, 1, 1) == "\"" && substr(s, length(s)) == "\""))) { s = substr(s, 2, length(s) - 2) }; return s }
     function add_entry(type, text, desc, extra) {
-        if (text ~ /^_/) return
-        entry_count++; entry_type[entry_count] = type; entry_text[entry_count] = text; entry_desc[entry_count] = desc; entry_extra[entry_count] = extra
-        if (type == "alias" || type == "function") { if (length(text) > max_name_width) max_name_width = length(text) }
+        if (text ~ /^_/) return;
+        entry_count++;
+        entry_type[entry_count] = type;
+        entry_text[entry_count] = text;
+        entry_desc[entry_count] = desc;
+        entry_extra[entry_count] = extra;
+        if (type == "alias" || type == "function") {
+            if (length(text) > max_name_width) max_name_width = length(text);
+        }
     }
-    BEGIN { max_name_width = 0; entry_count = 0; pending_comment = ""; skip_next = 0; function_depth = 0; in_heredoc = ""; started = 0 }
+    BEGIN { max_name_width = 0; entry_count = 0; pending_comment = ""; next_is_section = 0; function_depth = 0; in_heredoc = 0; skip_next = 0; }
     {
-        if (in_heredoc != "") { if (trim(line) == in_heredoc) in_heredoc = ""; next }
-        if (line ~ /<<'AWK'/) { in_heredoc = "AWK"; next }
+        if (in_heredoc) {
+            if ($0 == "AWK") {
+                in_heredoc = 0;
+            }
+            next;
+        }
+        if ($0 ~ /<<'AWK'/) {
+            in_heredoc = 1;
+            next;
+        }
+
         if (function_depth > 0) {
-            function_depth += gsub(/{/, "{", line) - gsub(/}/, "}", line);
+            function_depth += gsub(/{/, "{", $0) - gsub(/}/, "}", $0);
             if (function_depth <= 0) function_depth = 0;
             next;
         }
-        if (line ~ /^#[[:space:]]*=+/) { next_is_section = 1; pending_comment = ""; next }
-        if (next_is_section) {
-            if (line ~ /^#[[:space:]]*/) { section = line; sub(/^#[[:space:]]*/, "", section); section = trim(section); if (section != "") { add_entry("section", section); started = 1 } }
-            next_is_section = 0; pending_comment = ""; next
-        }
-        if (!started) next
-        if (trim(line) == "") { pending_comment = ""; next }
-        if (line ~ /^[[:space:]]*#/) {
-            comment = line; sub(/^#[[:space:]]*/, "", comment); comment = trim(comment);
-            if (comment ~ /allyas:ignore/) { skip_next = 1; pending_comment = ""; next }
-            if (comment ~ /^--/) { sub(/^--[[:space:]]*/, "", comment); add_entry("heading", comment); pending_comment = ""; next }
-            pending_comment = (pending_comment == "") ? comment : pending_comment "\n" comment;
-            next
-        }
-        if (skip_next) { skip_next = 0; pending_comment = ""; next }
 
-        is_alias = (line ~ /^[[:space:]]*alias[[:space:]]+/);
-        is_function = (line ~ /^[[:space:]]*[a-zA-Z0-9_-]+[[:space:]]*\(\)[[:space:]]*{/);
+        if (next_is_section) {
+            next_is_section = 0;
+            if ($0 ~ /^#[[:space:]]*/ && !($0 ~ /^#[[:space:]]*=+/)) {
+                section = $0;
+                sub(/^#[[:space:]]*/, "", section);
+                section = trim(section);
+                if (section != "") { add_entry("section", section) }
+            }
+        }
+        if ($0 ~ /^#[[:space:]]*=+/) {
+            next_is_section = 1;
+            pending_comment = "";
+            next;
+        }
+
+        if (trim($0) == "") { pending_comment = ""; next }
+
+        if ($0 ~ /^[[:space:]]*#/) {
+            comment = $0;
+            sub(/^#[[:space:]]*/, "", comment);
+            comment = trim(comment);
+            if (comment ~ /allyas:ignore/) {
+                skip_next = 1;
+                pending_comment = "";
+                next;
+            }
+            if (comment ~ /^--/) {
+                sub(/^--[[:space:]]*/, "", comment);
+                add_entry("heading", trim(comment));
+                pending_comment = "";
+                next;
+            }
+            pending_comment = (pending_comment == "") ? comment : pending_comment "\n" comment;
+            next;
+        }
+
+        if (skip_next) {
+            skip_next = 0;
+            pending_comment = "";
+            next;
+        }
+
+        is_alias = ($0 ~ /^[[:space:]]*alias[[:space:]]+/);
+        is_function = ($0 ~ /^[[:space:]]*[a-zA-Z0-9_-]+[[:space:]]*\(\)[[:space:]]*{/);
 
         if (is_alias) {
-            name = line; sub(/.*alias[[:space:]]+/, "", name); sub(/=.*/, "", name); name = trim(name);
-            command = line; sub(/.*=/, "", command);
+            name = $0; sub(/.*alias[[:space:]]+/, "", name); sub(/=.*/, "", name); name = trim(name);
+            command = $0; sub(/.*=/, "", command);
             inline_comment = "";
             if (match(command, /[[:space:]]#[[:space:]]+(.+)/, m)) {
                 inline_comment = trim(m[1]);
@@ -105,11 +147,15 @@ allyas() {
             desc = pending_comment != "" ? pending_comment : (inline_comment != "" ? inline_comment : command);
             add_entry("alias", name, desc, command);
         } else if (is_function) {
-            if (line ~ /\(\)[[:space:]]*{[[:space:]]*:;[[:space:]]*}[[:space:]]*$/) { pending_comment = ""; next }
-            name = line; sub(/[[:space:]]*\(\).*/, "", name); name = trim(name);
+            if ($0 ~ /\(\)[[:space:]]*{[[:space:]]*:;[[:space:]]*}[[:space:]]*$/) { pending_comment = ""; next }
+            name = $0; sub(/[[:space:]]*\(\).*/, "", name); name = trim(name);
             desc = pending_comment != "" ? pending_comment : "Shell function";
             add_entry("function", name, desc);
-            if (!(line ~ /}/)) { function_depth = 1 + gsub(/{/, "{", line) - gsub(/}/, "}", line); }
+
+            local_depth = gsub(/{/, "{", $0) - gsub(/}/, "}", $0);
+            if (local_depth > 0) {
+                function_depth = local_depth;
+            }
         }
         pending_comment = "";
     }
@@ -118,9 +164,12 @@ allyas() {
         item_format = sprintf("  %%-%ds  ", max_name_width);
         for (i = 1; i <= entry_count; i++) {
             type = entry_type[i]; text = entry_text[i]; desc = entry_desc[i];
-            if (type == "section") { if (i > 1) print ""; print text; }
-            else if (type == "heading") { print "  " text; }
-            else {
+            if (type == "section") {
+                if (i > 1) print "";
+                print text;
+            } else if (type == "heading") {
+                print "  " text;
+            } else if (type == "alias" || type == "function") {
                 n = split(desc, lines, "\n");
                 printf item_format, text; print lines[1];
                 for (j = 2; j <= n; j++) { printf item_format, ""; print lines[j]; }
