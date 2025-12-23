@@ -344,8 +344,8 @@ EOF
   return 0
 }
 
-# Switch between different LLM providers (codex, claude, gemini)
-# allyas:ignore
+# Switch between different LLM providers (codex, claude, gemini).
+# Usage: llm-use <provider>
 llm-use() {
   if [ -z "$1" ]; then
     echo "Current LLM: ${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
@@ -378,8 +378,7 @@ llm-use() {
   echo "✓ LLM switched to: $llm_name"
 }
 
-# List all available LLM providers and show which one is active
-# allyas:ignore
+# List all available LLM providers and show which one is active.
 llm-list() {
   _llm_show_status
 }

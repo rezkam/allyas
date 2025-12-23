@@ -753,18 +753,6 @@ $(cat "$SIG_FILE")"
 }
 
 # ============================================================================
-# LLM Utilities
-# ============================================================================
-# Implementations in helpers/llm.sh
-
-# Switch between different LLM providers (codex, claude, gemini).
-# Usage: llm-use <provider>
-llm-use() { :; }
-
-# List all available LLM providers and show which one is active.
-llm-list() { :; }
-
-# ============================================================================
 # macOS Specific Aliases
 # ============================================================================
 
