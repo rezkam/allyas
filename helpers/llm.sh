@@ -1,7 +1,3 @@
-# ============================================================================
-# LLM Utilities
-# ============================================================================
-#
 # Provides reusable functions for LLM-based analysis commands
 #
 # Architecture:
@@ -349,6 +345,7 @@ EOF
 }
 
 # Switch between different LLM providers (codex, claude, gemini)
+# allyas:ignore
 llm-use() {
   if [ -z "$1" ]; then
     echo "Current LLM: ${ALLYAS_LLM:-${ALLYAS_LLM_DEFAULT:-codex}}"
@@ -382,6 +379,7 @@ llm-use() {
 }
 
 # List all available LLM providers and show which one is active
+# allyas:ignore
 llm-list() {
   _llm_show_status
 }
