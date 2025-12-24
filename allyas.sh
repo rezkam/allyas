@@ -180,10 +180,6 @@ allyas() {
         # Ensure description width is not negative
         if (desc_col_width < 10) desc_col_width = 10;
 
-        # Create format strings
-        name_format = sprintf("%%%ds%%-%ds ", left_padding, name_col_width);
-        desc_indent_str = sprintf("%%%ds", desc_col_start);
-
         for (i = 1; i <= entry_count; i++) {
             type = entry_type[i];
             text = entry_text[i];
@@ -193,22 +189,22 @@ allyas() {
                 if (i > 1) print "";
                 print text;
             } else if (type == "heading") {
-                printf("%%%ds%s\n", left_padding, text);
+                printf "%*s%s\n", left_padding, "", text;
             } else if (type == "alias" || type == "function") {
-                printf name_format, " ", text;
+                printf "%*s%-*s%*s", left_padding, "", name_col_width, text, middle_padding, "";
 
                 n = split(desc, lines, "\n");
                 for (j = 1; j <= n; j++) {
                     line = lines[j];
                     if (j > 1) {
-                        printf desc_indent_str, "";
+                        printf "%*s", desc_col_start, "";
                     }
 
                     # Word wrapping logic
                     start = 1;
                     while (start <= length(line)) {
                         if (start > 1) {
-                             printf desc_indent_str, "";
+                            printf "%*s", desc_col_start, "";
                         }
 
                         # Get a substring that fits
@@ -236,6 +232,10 @@ allyas() {
                         } else {
                             print substr(sub_str, 1, last_space - 1);
                             start += last_space;
+                            # Skip any leading spaces in the remaining text
+                            while (start <= length(line) && substr(line, start, 1) == " ") {
+                                start++;
+                            }
                         }
                     }
                 }
