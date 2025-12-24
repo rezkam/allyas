@@ -57,7 +57,14 @@ allyas() {
     done
   fi
 
-  awk -f /dev/stdin "${files_to_scan[@]}" <<'AWK'
+  local cols
+  if [ -t 1 ]; then
+    cols=$(tput cols 2>/dev/null)
+  fi
+  : "${cols:=80}"
+
+
+  awk -v term_width="$cols" -f /dev/stdin "${files_to_scan[@]}" <<'AWK'
     function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
     function strip_quotes(s) { s = trim(s); if (length(s) >= 2 && ((substr(s, 1, 1) == "'" && substr(s, length(s)) == "'") || (substr(s, 1, 1) == "\"" && substr(s, length(s)) == "\""))) { s = substr(s, 2, length(s) - 2) }; return s }
     function add_entry(type, text, desc, extra) {
@@ -160,18 +167,78 @@ allyas() {
     }
     END {
         if (max_name_width < 1) max_name_width = 1;
-        item_format = sprintf("  %%-%ds  ", max_name_width);
+
+        # Define spacing and padding
+        left_padding = 2;
+        middle_padding = 4;
+
+        # Calculate column widths
+        name_col_width = max_name_width;
+        desc_col_start = left_padding + name_col_width + middle_padding;
+        desc_col_width = term_width - desc_col_start;
+
+        # Ensure description width is not negative
+        if (desc_col_width < 10) desc_col_width = 10;
+
+        # Create format strings
+        name_format = sprintf("%%%ds%%-%ds ", left_padding, name_col_width);
+        desc_indent_str = sprintf("%%%ds", desc_col_start);
+
         for (i = 1; i <= entry_count; i++) {
-            type = entry_type[i]; text = entry_text[i]; desc = entry_desc[i];
+            type = entry_type[i];
+            text = entry_text[i];
+            desc = entry_desc[i];
+
             if (type == "section") {
                 if (i > 1) print "";
                 print text;
             } else if (type == "heading") {
-                print "  " text;
+                printf("%%%ds%s\n", left_padding, text);
             } else if (type == "alias" || type == "function") {
+                printf name_format, " ", text;
+
                 n = split(desc, lines, "\n");
-                printf item_format, text; print lines[1];
-                for (j = 2; j <= n; j++) { printf item_format, ""; print lines[j]; }
+                for (j = 1; j <= n; j++) {
+                    line = lines[j];
+                    if (j > 1) {
+                        printf desc_indent_str, "";
+                    }
+
+                    # Word wrapping logic
+                    start = 1;
+                    while (start <= length(line)) {
+                        if (start > 1) {
+                             printf desc_indent_str, "";
+                        }
+
+                        # Get a substring that fits
+                        sub_str = substr(line, start, desc_col_width);
+
+                        # If the substring fits perfectly or the original line is short
+                        if (start + desc_col_width >= length(line)) {
+                            print sub_str;
+                            break;
+                        }
+
+                        # Find the last space to break on
+                        last_space = -1;
+                        for (k = length(sub_str); k > 0; k--) {
+                            if (substr(sub_str, k, 1) == " ") {
+                                last_space = k;
+                                break;
+                            }
+                        }
+
+                        # If no space was found, break the word
+                        if (last_space == -1) {
+                            print sub_str;
+                            start += desc_col_width;
+                        } else {
+                            print substr(sub_str, 1, last_space - 1);
+                            start += last_space;
+                        }
+                    }
+                }
             }
         }
     }
