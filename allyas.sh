@@ -884,3 +884,70 @@ alias flushdns='sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder'
 # Source helpers AFTER stub definitions so real implementations override stubs
 [ -f "$HELPERS_DIR/git.sh" ] && . "$HELPERS_DIR/git.sh"
 [ -f "$HELPERS_DIR/llm.sh" ] && . "$HELPERS_DIR/llm.sh"
+
+# ============================================================================
+# Version Check (runs entirely in background, zero shell startup impact)
+# ============================================================================
+
+ALLYAS_VERSION="0.0.13"
+
+# Check for updates entirely in background (once per day)
+# Notification is shown on NEXT shell start from cache, never blocks current shell
+_allyas_check_update() {
+  # Skip if disabled
+  [ "${ALLYAS_DISABLE_UPDATE_CHECK:-}" = "1" ] && return
+
+  local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/allyas"
+  local notify_file="$cache_dir/update_notify"
+
+  # Show notification from previous check (if any) - just a file read, very fast
+  if [ -f "$notify_file" ]; then
+    cat "$notify_file"
+    rm -f "$notify_file" 2>/dev/null
+  fi
+
+  # Everything else runs in background - zero blocking
+  # Double fork pattern: ( ( ... ) & ) ensures no job notification in zsh/bash
+  # Variables must be defined inside since subshell doesn't inherit locals
+  ( (
+    _cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/allyas"
+    _cache_file="$_cache_dir/update_check"
+    _notify_file="$_cache_dir/update_notify"
+    _version="$ALLYAS_VERSION"
+    _current_time=$(date +%s)
+
+    # Create cache directory if needed
+    mkdir -p "$_cache_dir" 2>/dev/null || exit 0
+
+    # Check if we already checked today (86400 seconds = 24 hours)
+    if [ -f "$_cache_file" ]; then
+      _last_check=$(head -1 "$_cache_file" 2>/dev/null || echo "0")
+      [ $((_current_time - _last_check)) -lt 86400 ] && exit 0
+    fi
+
+    # Fetch latest version from GitHub API (5 second timeout)
+    _latest=$(curl -sf --max-time 5 "https://api.github.com/repos/rezkam/allyas/releases/latest" 2>/dev/null | \
+      sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p')
+
+    # Save timestamp (even if fetch failed, to avoid hammering)
+    echo "$_current_time" > "$_cache_file"
+
+    # If we got a version and it's newer, prepare notification for next shell
+    if [ -n "$_latest" ] && [ "$_latest" != "$_version" ]; then
+      cat > "$_notify_file" <<EOF
+
+📦 allyas update available: v$_version → v$_latest
+   Run: brew upgrade allyas
+
+EOF
+    else
+      # No update or same version, clear any old notification
+      rm -f "$_notify_file" 2>/dev/null
+    fi
+  ) & )
+}
+
+# Only run in interactive shells
+case $- in
+  *i*) _allyas_check_update ;;
+esac

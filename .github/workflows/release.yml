@@ -25,6 +25,9 @@ jobs:
       - name: Checkout source repository
         if: steps.validate_tag.outputs.valid == 'true'
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          fetch-depth: 0  # Need full history to move tags
 
       - name: Extract version from tag
         if: steps.validate_tag.outputs.valid == 'true'
@@ -38,7 +41,59 @@ jobs:
           echo "📦 Version: $VERSION"
           echo "🏷️  Tag: $TAG"
 
-      - name: Calculate SHA256 and create tarball URL
+      - name: Update ALLYAS_VERSION and retag
+        if: steps.validate_tag.outputs.valid == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Check current version in file
+          FILE_VERSION=$(grep -o 'ALLYAS_VERSION="[^"]*"' allyas.sh | cut -d'"' -f2)
+          echo "📄 Current ALLYAS_VERSION in file: $FILE_VERSION"
+
+          if [ "$FILE_VERSION" = "$VERSION" ]; then
+            echo "✅ ALLYAS_VERSION already matches tag, no update needed"
+          else
+            echo "📝 Updating ALLYAS_VERSION from $FILE_VERSION to $VERSION..."
+
+            # Update the version in allyas.sh
+            sed -i "s/^ALLYAS_VERSION=\"[^\"]*\"/ALLYAS_VERSION=\"$VERSION\"/" allyas.sh
+
+            # Verify the update
+            if grep -q "^ALLYAS_VERSION=\"$VERSION\"" allyas.sh; then
+              echo "✅ ALLYAS_VERSION updated to $VERSION"
+            else
+              echo "❌ Failed to update ALLYAS_VERSION"
+              exit 1
+            fi
+
+            # Commit the version update
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add allyas.sh
+            git commit -m "chore: bump version to $VERSION"
+
+            # Delete the old tag (locally and remotely)
+            git tag -d "$TAG"
+            git push origin ":refs/tags/$TAG"
+
+            # Create new tag at the updated commit
+            git tag "$TAG"
+
+            # Push the commit and new tag
+            git push origin main
+            git push origin "$TAG"
+
+            echo "✅ Version updated, committed, and tag moved to new commit"
+          fi
+
+      - name: Wait for GitHub to process the new tag
+        if: steps.validate_tag.outputs.valid == 'true'
+        run: |
+          echo "⏳ Waiting for GitHub to process tag update..."
+          sleep 10
+
+      - name: Calculate SHA256 from tarball
         if: steps.validate_tag.outputs.valid == 'true'
         id: release
         run: |
@@ -56,10 +111,6 @@ jobs:
           echo "tarball_url=$TARBALL_URL" >> "$GITHUB_OUTPUT"
           echo "🔗 Tarball URL: $TARBALL_URL"
 
-          # Wait for GitHub to generate the tarball
-          echo "⏳ Waiting for GitHub to generate tarball..."
-          sleep 5
-
           # Download and calculate SHA256 with retries
           echo "📥 Downloading tarball and calculating SHA256..."
           SHA256=""
@@ -68,25 +119,35 @@ jobs:
             if curl -fsSL "$TARBALL_URL" -o /tmp/tarball.tar.gz 2>/dev/null; then
               # Verify it's actually a gzip file
               if gzip -t /tmp/tarball.tar.gz 2>/dev/null; then
-                SHA256=$(shasum -a 256 /tmp/tarball.tar.gz | awk '{print $1}')
-                if [ -n "$SHA256" ]; then
+                # Verify the version is correct in the tarball
+                cd /tmp
+                tar xzf tarball.tar.gz
+                EXTRACT_DIR=$(ls -d allyas-* 2>/dev/null | head -1)
+                TARBALL_VERSION=$(grep -o 'ALLYAS_VERSION="[^"]*"' "$EXTRACT_DIR/allyas.sh" | cut -d'"' -f2)
+                cd -
+
+                if [ "$TARBALL_VERSION" = "${{ steps.version.outputs.version }}" ]; then
+                  SHA256=$(shasum -a 256 /tmp/tarball.tar.gz | awk '{print $1}')
                   echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
                   echo "🔐 SHA256: $SHA256"
-                  rm -f /tmp/tarball.tar.gz
+                  echo "✅ Tarball contains correct version: $TARBALL_VERSION"
+                  rm -rf /tmp/tarball.tar.gz /tmp/allyas-*
                   break
+                else
+                  echo "⚠️  Tarball version mismatch: expected ${{ steps.version.outputs.version }}, got $TARBALL_VERSION"
                 fi
               else
                 echo "⚠️  Downloaded file is not a valid gzip archive"
               fi
             fi
-            rm -f /tmp/tarball.tar.gz
+            rm -rf /tmp/tarball.tar.gz /tmp/allyas-*
             SHA256=""
             echo "⚠️  Retry $i/5 failed, waiting..."
-            sleep 3
+            sleep 5
           done
 
           if [ -z "$SHA256" ]; then
-            echo "❌ Failed to calculate SHA256 after 5 retries"
+            echo "❌ Failed to get valid tarball after 5 retries"
             exit 1
           fi
 
