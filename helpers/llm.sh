@@ -22,42 +22,49 @@
 : "${ALLYAS_CLAUDE_MODEL:=haiku}"
 : "${ALLYAS_GEMINI_MODEL:=gemini-2.5-flash}"
 
-# allyas:ignore Map LLM name to actual command with flags
+# allyas:ignore Execute LLM command directly without eval
 # Arguments:
 #   $1 - llm_name (codex, claude, gemini)
-#   $2 - (optional) output_file for raw response extraction (only used by codex)
-_llm_get_command() {
+#   $2 - prompt (the text to send to the LLM)
+#   $3 - output_file (stdout destination)
+#   $4 - stderr_file (stderr destination)
+#   $5 - response_file (for codex --output-last-message)
+_llm_execute() {
   local llm_name="$1"
-  local output_file="$2"
+  local prompt="$2"
+  local output_file="$3"
+  local stderr_file="$4"
+  local response_file="$5"
 
   case "$llm_name" in
     codex)
       # Codex supports --output-last-message to extract clean response
-      # Model can be overridden with ALLYAS_CODEX_MODEL env var
-      local model="${ALLYAS_CODEX_MODEL}"
-      if [ -n "$output_file" ]; then
-        echo "codex exec --skip-git-repo-check -m \"$model\" --output-last-message \"$output_file\" --color never"
-      else
-        echo "codex exec --skip-git-repo-check -m \"$model\""
-      fi
+      codex exec --skip-git-repo-check \
+        -m "${ALLYAS_CODEX_MODEL}" \
+        --output-last-message "$response_file" \
+        --color never \
+        "$prompt" >"$output_file" 2>"$stderr_file"
       ;;
     claude)
       # Claude's -p mode outputs just the response (no session markers)
-      # Model can be overridden with ALLYAS_CLAUDE_MODEL env var (haiku, sonnet, opus)
-      local model="${ALLYAS_CLAUDE_MODEL}"
-      echo "claude --model \"$model\" -p"
+      claude --model "${ALLYAS_CLAUDE_MODEL}" -p "$prompt" >"$output_file" 2>"$stderr_file"
       ;;
     gemini)
       # Gemini with JSON output for clean response extraction
-      # Model can be overridden with ALLYAS_GEMINI_MODEL env var
-      # Note: -o must come before -p, and -p must be last before the prompt
-      local model="${ALLYAS_GEMINI_MODEL}"
-      echo "gemini -m \"$model\" -o json -p"
+      gemini -m "${ALLYAS_GEMINI_MODEL}" -o json -p "$prompt" >"$output_file" 2>"$stderr_file"
       ;;
     *)
       echo "Error: Unknown LLM '$llm_name'. Supported: codex, claude, gemini" >&2
       return 1
       ;;
+  esac
+}
+
+# allyas:ignore Check if LLM name is valid
+_llm_is_valid() {
+  case "$1" in
+    codex|claude|gemini) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -179,28 +186,31 @@ llm_analyze() {
     return 1
   fi
 
-  # Create temp files
-  local prompt_file="$(mktemp /tmp/llm_analyze.XXXXXX)" || return 1
+  # Create temp files for output
   local output_file="$(mktemp /tmp/llm_analyze.out.XXXXXX)" || return 1
   local stderr_file="$(mktemp /tmp/llm_analyze.stderr.XXXXXX)" || return 1
   local response_file="$(mktemp /tmp/llm_analyze.response.XXXXXX)" || return 1
 
   # Build prompt
-  cat >"$prompt_file" <<EOF
+  local prompt
+  prompt="$(cat <<EOF
 INSTRUCTIONS:
 $instructions
 
 DATA:
 $data
 EOF
+)"
 
-  # Map name to command with response extraction support
-  local llm_cmd
-  llm_cmd="$(_llm_get_command "$llm_name" "$response_file")" || return 1
+  # Validate LLM name
+  if ! _llm_is_valid "$llm_name"; then
+    echo "Error: Unknown LLM '$llm_name'. Supported: codex, claude, gemini" >&2
+    rm -f "$output_file" "$stderr_file" "$response_file"
+    return 1
+  fi
 
-  # Run LLM
-  # Separate stdout and stderr to properly handle different LLM output formats
-  eval "$llm_cmd" '"$(cat "$prompt_file")"' >"$output_file" 2>"$stderr_file"
+  # Run LLM directly (no eval)
+  _llm_execute "$llm_name" "$prompt" "$output_file" "$stderr_file" "$response_file"
   local exit_code=$?
 
   # Check if command failed
@@ -234,7 +244,7 @@ EOF
     echo "  • Try switching to another LLM: llm-list" >&2
     echo "" >&2
     
-    rm -f "$prompt_file" "$output_file" "$stderr_file" "$response_file"
+    rm -f "$output_file" "$stderr_file" "$response_file"
     return $exit_code
   fi
 
@@ -316,7 +326,7 @@ EOF
     echo "  • Try again in a few moments" >&2
     echo "  • Try switching to another LLM: llm-list" >&2
     echo "" >&2
-    rm -f "$prompt_file" "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
+    rm -f "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
     return 1
   fi
   
@@ -335,7 +345,7 @@ EOF
     echo "  • Wait for the rate limit to reset" >&2
     echo "  • Try switching to another LLM: llm-list" >&2
     echo "" >&2
-    rm -f "$prompt_file" "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
+    rm -f "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
     return 1
   fi
 
@@ -343,7 +353,7 @@ EOF
   echo "$final_response"
 
   # Cleanup
-  rm -f "$prompt_file" "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
+  rm -f "$output_file" "$stderr_file" "$response_file" "$temp_response_file"
 
   return 0
 }
@@ -367,7 +377,7 @@ llm-use() {
   local llm_name="$1"
 
   # Validate LLM name
-  if ! _llm_get_command "$llm_name" >/dev/null 2>&1; then
+  if ! _llm_is_valid "$llm_name"; then
     echo "Error: Unknown LLM '$llm_name'" >&2
     echo "Supported: codex, claude, gemini" >&2
     return 1

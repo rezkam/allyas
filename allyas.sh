@@ -247,98 +247,98 @@ AWK
 }
 
 # ============================================================================
-# General Aliases
+# General Functions
 # ============================================================================
 
 # List files in long format, including hidden files and human-readable sizes.
-alias ll='ls -lah'
+ll() { ls -lah "$@"; }
 # List all files, including hidden ones, in a single column.
-alias la='ls -A'
+la() { ls -A "$@"; }
 # List files in columns, marking directories with a trailing slash.
-alias l='ls -CF'
+l() { ls -CF "$@"; }
 
 # Navigate up one directory.
-alias ..='cd ..'
+..() { cd ..; }
 # Navigate up two directories.
-alias ...='cd ../..'
+...() { cd ../..; }
 # Navigate up three directories.
-alias ....='cd ../../..'
+....() { cd ../../..; }
 
 # Grep with color highlighting for matches.
-alias grep='grep --color=auto'
+grep() { command grep --color=auto "$@"; }
 
 # List files sorted by modification time, newest last.
-alias lt='ls -ltrh'
+lt() { ls -ltrh "$@"; }
 # List files sorted by size, smallest first.
-alias lsize='ls -lSrh'
+lsize() { ls -lSrh "$@"; }
 # Count the total number of files in the current directory and subdirectories.
-alias count='find . -type f | wc -l'
+count() { find . -type f | wc -l; }
 
-# Display the current date and time in 'YYYY-MM-DD HH:MM:SS' format.
-alias now='date +"%Y-%m-%d %H:%M:%S"'
+# Display the current date and time in 'YYYY-MM-DD HH:%M:%S' format.
+now() { date +"%Y-%m-%d %H:%M:%S"; }
 # Display the current week number of the year.
-alias week='date +%V'
+week() { date +%V; }
 
 # Create a new temporary directory and navigate into it.
-alias cdtemp='cd $(mktemp -d)'
+cdtemp() { cd "$(mktemp -d)"; }
 
 # ============================================================================
-# Git Aliases
+# Git Functions
 # ============================================================================
 
 #-- Status & Info
 # Show the working tree status, including changes and untracked files.
-alias gis='git status'
+gis() { git status "$@"; }
 # Show a brief status of the working tree (branch, staged, unstaged).
-alias gisb='git status -sb'
+gisb() { git status -sb "$@"; }
 # List all local branches.
-alias gib='git branch'
+gib() { git branch "$@"; }
 # List all local and remote-tracking branches.
-alias giba='git branch -a'
+giba() { git branch -a "$@"; }
 # Delete a local branch that has been fully merged.
-alias gibd='git branch -d'
+gibd() { git branch -d "$@"; }
 # Force delete a local branch, regardless of its merge status.
-alias gibD='git branch -D'
+gibD() { git branch -D "$@"; }
 
 #-- Log & History
 # Show the commit history for the current branch.
-alias gil='git log'
+gil() { git log "$@"; }
 # Show a compact, graphical log of all branches, with decorations.
-alias gilog='git log --oneline --graph --decorate --all'
+gilog() { git log --oneline --graph --decorate --all "$@"; }
 # Show commit history with the patch (diff) for each commit.
-alias gilp='git log -p'
+gilp() { git log -p "$@"; }
 # Show commit history with statistics on file changes.
-alias gils='git log --stat'
+gils() { git log --stat "$@"; }
 # Show a compact, graphical log of all branches.
-alias gilg='git log --graph --oneline --all'
+gilg() { git log --graph --oneline --all "$@"; }
 # Show the most recent commit with statistics on file changes.
-alias gilast='git log -1 HEAD --stat'
+gilast() { git log -1 HEAD --stat "$@"; }
 
 #-- Add & Commit
 # Stage all changes in the current directory for the next commit.
-alias gia='git add .'
+gia() { git add . "$@"; }
 # Stage all changes in the entire repository for the next commit.
-alias giaa='git add --all'
+giaa() { git add --all "$@"; }
 # Interactively stage parts of files for the next commit.
-alias giap='git add -p'
+giap() { git add -p "$@"; }
 # Commit staged changes with an inline message.
-alias gim='git commit -m'
+gim() { git commit -m "$@"; }
 # Stage all tracked files and commit them in one step.
-alias gima='git commit -am'
+gima() { git commit -am "$@"; }
 # Modify the last commit, allowing changes to the commit message and files.
-alias gimend='git commit --amend'
+gimend() { git commit --amend "$@"; }
 # Modify the last commit without changing the commit message.
-alias gimendn='git commit --amend --no-edit'
+gimendn() { git commit --amend --no-edit "$@"; }
 
 #-- Diff
 # Show changes between the working directory and the index.
-alias gif='git diff'
+gif() { git diff "$@"; }
 # Show changes between the index (staged files) and the last commit.
-alias giff='git diff --cached'
+giff() { git diff --cached "$@"; }
 # Show a word-level diff instead of a line-level diff.
-alias gifw='git diff --word-diff'
+gifw() { git diff --word-diff "$@"; }
 # Show only the names of files that have changed.
-alias gifn='git diff --name-only'
+gifn() { git diff --name-only "$@"; }
 
 #-- Push & Pull
 # Pushes the current branch to its configured upstream remote.
@@ -354,7 +354,7 @@ gushf() {
 }
 
 # Fetch changes from a remote and merge them into the current branch.
-alias gull='git pull'
+gull() { git pull "$@"; }
 
 # Fetches changes and rebases the current branch on top of the default remote branch (main/master).
 gullm() {
@@ -374,22 +374,22 @@ gullm() {
 }
 
 # Fetch changes and rebase the current branch on top of the upstream branch.
-alias gullr='git pull --rebase'
+gullr() { git pull --rebase "$@"; }
 
 # Fetch updates from all configured remote repositories.
-alias gifa='git fetch --all'
+gifa() { git fetch --all "$@"; }
 # Fetch from all remotes and remove any remote-tracking branches that no longer exist.
-alias gifap='git fetch --all --prune'
+gifap() { git fetch --all --prune "$@"; }
 
 #-- Checkout & Branch
 # Switch branches or restore working tree files.
-alias gco='git checkout'
+gco() { git checkout "$@"; }
 # Create a new branch and switch to it.
-alias gcb='git checkout -b'
+gcb() { git checkout -b "$@"; }
 # Switch to the default branch (main or master).
-alias gcm='git checkout "$(default_branch)"'
+gcm() { git checkout "$(default_branch)"; }
 # Switch to the previously checked out branch.
-alias gc-='git checkout -'
+gc-() { git checkout -; }
 
 #-- Reset & Undo
 # Performs a hard reset on a given commit with confirmation.
@@ -411,9 +411,9 @@ girhah() {
 }
 
 # Unstage all changes from the staging area.
-alias girh='git reset HEAD'
+girh() { git reset HEAD "$@"; }
 # Undo the last commit but keep the changes in the working directory.
-alias girh1='git reset HEAD~1'
+girh1() { git reset HEAD~1 "$@"; }
 
 # Performs a hard reset to the upstream branch with confirmation.
 # This will discard all local changes and commits.
@@ -430,62 +430,61 @@ girhu() {
 
 #-- Stash
 # Stash local changes in a temporary area.
-alias gist='git stash'
+gist() { git stash "$@"; }
 # Apply the most recent stash and remove it from the stash list.
-alias gistp='git stash pop'
+gistp() { git stash pop "$@"; }
 # List all stashed changes.
-alias gistl='git stash list'
+gistl() { git stash list "$@"; }
 # Discard the most recent stash.
-alias gistd='git stash drop'
+gistd() { git stash drop "$@"; }
 # Show the changes recorded in a stash as a patch.
-alias gists='git stash show -p'
+gists() { git stash show -p "$@"; }
 
 #-- Clone & Remote
 # Clone a repository into a new directory.
-alias glone='git clone'
+glone() { git clone "$@"; }
 # Perform a shallow clone, which is faster for large repositories.
-alias gloned='git clone --depth=1'
+gloned() { git clone --depth=1 "$@"; }
 # List all remote repositories with their URLs.
-alias gir='git remote -v'
+gir() { git remote -v "$@"; }
 # Add a new remote repository.
-alias gira='git remote add'
+gira() { git remote add "$@"; }
 # Remove a remote repository.
-alias girr='git remote remove'
+girr() { git remote remove "$@"; }
 
 #-- Merge & Rebase
 # Merge a branch, always creating a new merge commit.
-alias gimnf='git merge --no-ff'
+gimnf() { git merge --no-ff "$@"; }
 # Reapply commits on top of another base tip.
-alias gire='git rebase'
+gire() { git rebase "$@"; }
 # Start an interactive rebase to edit, squash, or reorder commits.
-alias girei='git rebase -i'
+girei() { git rebase -i "$@"; }
 # Continue a rebase that was paused due to conflicts.
-alias girec='git rebase --continue'
+girec() { git rebase --continue "$@"; }
 # Abort a rebase and return to the original state.
-alias girea='git rebase --abort'
+girea() { git rebase --abort "$@"; }
 
 #-- Tags
 # List, create, or delete tags.
-alias gtag='git tag'
+gtag() { git tag "$@"; }
 # Create an annotated tag.
-alias gta='git tag -a'
+gta() { git tag -a "$@"; }
 # Delete a tag.
-alias gtd='git tag -d'
+gtd() { git tag -d "$@"; }
 # List all tags.
-alias gtl='git tag -l'
+gtl() { git tag -l "$@"; }
 
 #-- Worktree
 # Manage multiple working trees attached to the same repository.
-alias gwt='git worktree'
+gwt() { git worktree "$@"; }
 # Add a new worktree.
-alias gwta='git worktree add'
+gwta() { git worktree add "$@"; }
 # List all worktrees.
-alias gwtl='git worktree list'
+gwtl() { git worktree list "$@"; }
 # Remove a worktree.
-alias gwtr='git worktree remove'
+gwtr() { git worktree remove "$@"; }
 
 #-- Cleanup & Maintenance
-unalias gclean 2>/dev/null || true
 # Removes untracked files and directories with confirmation.
 gclean() {
   echo "⚠️  WARNING: This will permanently delete all untracked files and directories!"
@@ -513,20 +512,20 @@ ggc() {
 
 #-- Shortcuts
 # Stage all changes and commit with a 'WIP' (Work In Progress) message.
-alias gasave='git add -A && git commit -m "WIP: work in progress"'
+gasave() { git add -A && git commit -m "WIP: work in progress"; }
 # Undo the last commit but keep the changes staged.
-alias gaundo='git reset --soft HEAD~1'
+gaundo() { git reset --soft HEAD~1; }
 # Stage all changes and commit with a 'WIP' message, skipping pre-commit hooks.
-alias gawip='git add -A && git commit -m "WIP" --no-verify'
+gawip() { git add -A && git commit -m "WIP" --no-verify; }
 # Amend the last commit without opening an editor.
-alias gamend='git commit --amend --no-edit'
+gamend() { git commit --amend --no-edit "$@"; }
 
 # ============================================================================
-# Development Aliases
+# Development Functions
 # ============================================================================
 
 # List only directories in the current path.
-alias lsd='ls -d */'
+lsd() { ls -d */ "$@"; }
 
 # Find files by name in the current directory and subdirectories.
 # Usage: findf '*.txt'
@@ -555,23 +554,22 @@ psg() {
     echo "Usage: psg <process_name>"
     return 1
   fi
-  ps aux | grep -i -- "$1" | grep -v grep
+  ps aux | command grep -i -- "$1" | command grep -v grep
 }
 
 # Open the Zsh configuration file in the nano editor.
-alias zshrc='nano ~/.zshrc'
+zshrc() { nano ~/.zshrc; }
 # Open the Bash configuration file in the nano editor.
-alias bashrc='nano ~/.bashrc'
+bashrc() { nano ~/.bashrc; }
 
 # Show disk usage of the current directory, one level deep, in human-readable format.
-alias duh='du -h -d 1'
+duh() { du -h -d 1 "$@"; }
 # Show disk usage of all mounted file systems in human-readable format.
-alias dfs='df -h'
+dfs() { df -h "$@"; }
 
 # Get your public IP address.
-alias myip='curl -s ifconfig.me'
+myip() { curl -s ifconfig.me; }
 
-unalias ports 2>/dev/null || true
 # Show all listening TCP ports (requires sudo).
 ports() {
   echo "Requesting sudo access to view all listening TCP ports..."
@@ -824,15 +822,15 @@ $(cat "$SIG_FILE")"
 }
 
 # ============================================================================
-# macOS Specific Aliases
+# macOS Specific Functions
 # ============================================================================
 
 # Copy standard input to the macOS clipboard.
-alias copy='pbcopy'
+copy() { pbcopy "$@"; }
 # Paste the contents of the macOS clipboard to standard output.
-alias paste='pbpaste'
+paste() { pbpaste "$@"; }
 # Copy the current working directory path to the macOS clipboard.
-alias cpwd='pwd | pbcopy'
+cpwd() { pwd | pbcopy; }
 
 # Copy the absolute path of a file to the clipboard.
 # Usage: cpf <file>
@@ -871,15 +869,15 @@ ccopy() {
 }
 
 # Open the current directory in the macOS Finder.
-alias o='open .'
+o() { open . "$@"; }
 
 # Show hidden files in the macOS Finder.
-alias showfiles='defaults write com.apple.finder AppleShowAllFiles YES; killall Finder'
+showfiles() { defaults write com.apple.finder AppleShowAllFiles YES; killall Finder; }
 # Hide hidden files in the macOS Finder.
-alias hidefiles='defaults write com.apple.finder AppleShowAllFiles NO; killall Finder'
+hidefiles() { defaults write com.apple.finder AppleShowAllFiles NO; killall Finder; }
 
 # Flush the DNS cache on macOS.
-alias flushdns='sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder'
+flushdns() { sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder; }
 
 # Source helpers AFTER stub definitions so real implementations override stubs
 [ -f "$HELPERS_DIR/git.sh" ] && . "$HELPERS_DIR/git.sh"
