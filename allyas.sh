@@ -146,9 +146,10 @@ allyas() {
             name = $0; sub(/.*alias[[:space:]]+/, "", name); sub(/=.*/, "", name); name = trim(name);
             command = $0; sub(/.*=/, "", command);
             inline_comment = "";
-            if (match(command, /[[:space:]]#[[:space:]]+(.+)/, m)) {
-                inline_comment = trim(m[1]);
-                sub(/[[:space:]]#[[:space:]]+.*/, "", command);
+            # Extract inline comment (BSD AWK compatible - no capture groups)
+            if (match(command, /[[:space:]]#[[:space:]]+/)) {
+                inline_comment = trim(substr(command, RSTART + RLENGTH));
+                command = substr(command, 1, RSTART - 1);
             }
             command = strip_quotes(trim(command));
             desc = pending_comment != "" ? pending_comment : (inline_comment != "" ? inline_comment : command);
@@ -718,20 +719,23 @@ portswhy() {
 
   echo "🔐 Checking code signatures..."
   : >"$SIG_FILE"
+  # BSD AWK compatible - no capture groups in match()
   awk '
     /^### / {
       app=""; exec=""
 
-      if (match($0, /app=(\/[^ ]+( [^ ]+)*\.app)( |$)/, arr)) {
-        app = arr[1]
-      } else if (match($0, / app=([^ ]+)/, arr)) {
-        app = arr[1]
+      # Extract app= value (handles paths with spaces ending in .app)
+      if (match($0, /app=\/[^ ]+\.app/)) {
+        app = substr($0, RSTART + 4, RLENGTH - 4)
+      } else if (match($0, / app=[^ ]+/)) {
+        app = substr($0, RSTART + 5, RLENGTH - 5)
       }
 
-      if (match($0, /exec=(\/[^ ]+( [^ ]+)*\.app)( |$)/, arr)) {
-        exec = arr[1]
-      } else if (match($0, / exec=([^ ]+)/, arr)) {
-        exec = arr[1]
+      # Extract exec= value (handles paths with spaces ending in .app)
+      if (match($0, /exec=\/[^ ]+\.app/)) {
+        exec = substr($0, RSTART + 5, RLENGTH - 5)
+      } else if (match($0, / exec=[^ ]+/)) {
+        exec = substr($0, RSTART + 6, RLENGTH - 6)
       }
 
       t=app
