@@ -26,6 +26,7 @@ jobs:
         if: steps.validate_tag.outputs.valid == 'true'
         uses: actions/checkout@v4
         with:
+          ref: main  # Checkout main branch, not the tag
           token: ${{ secrets.TAP_GITHUB_TOKEN }}
           fetch-depth: 0  # Need full history to move tags
 
@@ -81,7 +82,7 @@ jobs:
             git tag "$TAG"
 
             # Push the commit and new tag
-            git push origin main
+            git push origin HEAD:main
             git push origin "$TAG"
 
             echo "✅ Version updated, committed, and tag moved to new commit"
