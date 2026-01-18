@@ -280,7 +280,7 @@ now() { date +"%Y-%m-%d %H:%M:%S"; }
 week() { date +%V; }
 
 # Create a new temporary directory and navigate into it.
-cdtemp() { cd "$(mktemp -d)"; }
+cdtemp() { cd "$(mktemp -d)" || return; }
 
 # ============================================================================
 # Git Functions
@@ -418,13 +418,13 @@ girh1() { git reset HEAD~1 "$@"; }
 # Performs a hard reset to the upstream branch with confirmation.
 # This will discard all local changes and commits.
 girhu() {
-  if ! git rev-parse --abbrev-ref @{u} >/dev/null 2>&1; then
+  if ! git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
     echo "❌ No upstream configured for current branch"
     return 1
   fi
   echo "⚠️  WARNING: This will reset to upstream and discard all local changes!"
   if confirm_action "Are you sure? [y/N] "; then
-    git reset --hard @{u}
+    git reset --hard '@{u}'
   fi
 }
 
@@ -605,6 +605,7 @@ portswhy() {
   }
   trap cleanup EXIT
 
+  # shellcheck disable=SC2024  # Redirect is intentional - writing to user's temp file
   if ! sudo lsof -iTCP -sTCP:LISTEN -n -P >"$LSOF_FILE" 2>&1; then
     FAIL=1
     echo "Error: Failed to run 'sudo lsof'. Check sudo access and that lsof is installed."
