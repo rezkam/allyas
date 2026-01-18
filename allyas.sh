@@ -900,10 +900,9 @@ _allyas_check_update() {
   local notify_file="$cache_dir/update_notify"
 
   # Show notification from previous check (if any) - just a file read, very fast
-  if [ -f "$notify_file" ]; then
-    cat "$notify_file"
-    rm -f "$notify_file" 2>/dev/null
-  fi
+  # Don't delete after showing - keep showing until user upgrades
+  # The background check will delete it when versions match
+  [ -f "$notify_file" ] && cat "$notify_file"
 
   # Everything else runs in background - zero blocking
   # Double fork pattern: ( ( ... ) & ) ensures no job notification in zsh/bash
