@@ -31,6 +31,12 @@ unset _allyas_source
 
 # Display all aliases and functions defined in this file
 allyas() {
+  # Handle version argument
+  if [ "${1:-}" = "version" ] || [ "${1:-}" = "--version" ] || [ "${1:-}" = "-v" ]; then
+    echo "allyas ${ALLYAS_VERSION:-unknown}"
+    return 0
+  fi
+
   local source_file=""
 
   if [ -n "${ALLYAS_SOURCE_FILE:-}" ] && [ -f "${ALLYAS_SOURCE_FILE}" ]; then
