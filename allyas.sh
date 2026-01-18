@@ -5,6 +5,10 @@
 # To use these aliases, add this line to your shell configuration:
 #   [ -f $(brew --prefix)/etc/allyas.sh ] && . $(brew --prefix)/etc/allyas.sh
 
+# Guard against double-sourcing
+[ -n "${_ALLYAS_LOADED:-}" ] && return 0
+_ALLYAS_LOADED=1
+
 # Determine helpers directory location
 # Resolve symlinks to find the actual installation directory
 if [ -n "${BASH_SOURCE:-}" ]; then
