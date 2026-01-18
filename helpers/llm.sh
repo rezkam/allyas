@@ -187,9 +187,10 @@ llm_analyze() {
   fi
 
   # Create temp files for output
-  local output_file="$(mktemp /tmp/llm_analyze.out.XXXXXX)" || return 1
-  local stderr_file="$(mktemp /tmp/llm_analyze.stderr.XXXXXX)" || return 1
-  local response_file="$(mktemp /tmp/llm_analyze.response.XXXXXX)" || return 1
+  local output_file stderr_file response_file
+  output_file="$(mktemp /tmp/llm_analyze.out.XXXXXX)" || return 1
+  stderr_file="$(mktemp /tmp/llm_analyze.stderr.XXXXXX)" || return 1
+  response_file="$(mktemp /tmp/llm_analyze.response.XXXXXX)" || return 1
 
   # Build prompt
   local prompt
@@ -250,7 +251,8 @@ EOF
 
   # Extract response based on LLM type
   local final_response=""
-  local temp_response_file="$(mktemp /tmp/llm_analyze.final.XXXXXX)" || return 1
+  local temp_response_file
+  temp_response_file="$(mktemp /tmp/llm_analyze.final.XXXXXX)" || return 1
   
   if [ -s "$response_file" ]; then
     # Codex: uses --output-last-message, response is in response_file
