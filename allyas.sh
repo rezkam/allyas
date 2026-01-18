@@ -888,7 +888,7 @@ flushdns() { sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder; }
 # Version Check (runs entirely in background, zero shell startup impact)
 # ============================================================================
 
-ALLYAS_VERSION="0.0.15"
+ALLYAS_VERSION="0.0.16"
 
 # Check for updates entirely in background (once per day)
 # Notification is shown on NEXT shell start from cache, never blocks current shell
