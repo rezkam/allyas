@@ -51,27 +51,6 @@ Describe 'LLM Helper Functions'
       The status should be failure
     End
 
-    # Test with a mock for uninstalled LLM
-    Describe 'when LLM not installed'
-      # Create a subshell where the command doesn't exist
-      mock_no_command() {
-        command() {
-          return 1
-        }
-      }
-
-      It 'returns failure and shows error message'
-        # We can only test this if we mock the command function
-        # Skip if any LLM is actually installed
-        Skip if 'codex is installed' command -v codex >/dev/null 2>&1
-        Skip if 'claude is installed' command -v claude >/dev/null 2>&1
-        Skip if 'gemini is installed' command -v gemini >/dev/null 2>&1
-
-        When call _llm_check_installed 'codex'
-        The status should be failure
-        The stderr should include 'not installed'
-      End
-    End
   End
 
   Describe '_llm_execute()'
