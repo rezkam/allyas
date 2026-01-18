@@ -1,0 +1,22 @@
+# ShellSpec Configuration for allyas
+# Run tests with: shellspec
+# Run in specific shell: shellspec --shell bash
+# Run in specific shell: shellspec --shell zsh
+
+# Default shell for tests
+--shell bash
+
+# Use spec directory
+--default-path spec
+
+# Enable color output
+--color
+
+# Show failure details
+--failure-exit-code 1
+
+# Output format
+--format progress
+
+# Enable quick mode for faster iteration
+--quick

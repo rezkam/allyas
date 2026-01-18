@@ -32,3 +32,9 @@ Temporary Items
 # Claude Code
 .claude/
 CLAUDE.md
+
+# ShellSpec
+.shellspec-quick.log
+
+# Documentation (internal only)
+docs/

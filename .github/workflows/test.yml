@@ -1,0 +1,43 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (${{ matrix.shell }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [bash, zsh]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ShellSpec
+        run: brew install shellspec
+
+      - name: Run tests in ${{ matrix.shell }}
+        run: shellspec --shell ${{ matrix.shell }} --format documentation
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: brew install shellcheck
+
+      - name: Run ShellCheck on allyas.sh
+        run: shellcheck --shell=bash --severity=warning allyas.sh
+
+      - name: Run ShellCheck on helpers
+        run: shellcheck --shell=bash --severity=warning helpers/*.sh
