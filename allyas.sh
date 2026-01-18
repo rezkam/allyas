@@ -928,11 +928,12 @@ _allyas_check_update() {
       sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p')
 
     # Save timestamp (even if fetch failed, to avoid hammering)
-    echo "$_current_time" > "$_cache_file"
+    # Use >| to force overwrite even with noclobber set
+    echo "$_current_time" >| "$_cache_file"
 
     # If we got a version and it's newer, prepare notification for next shell
     if [ -n "$_latest" ] && [ "$_latest" != "$_version" ]; then
-      cat > "$_notify_file" <<EOF
+      cat >| "$_notify_file" <<EOF
 
 📦 allyas update available: v$_version → v$_latest
    Run: brew upgrade allyas
