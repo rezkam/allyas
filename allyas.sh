@@ -260,9 +260,6 @@ AWK
 # General Functions
 # ============================================================================
 
-# Grep with color highlighting for matches.
-grep() { command grep --color=auto "$@"; }
-
 # List files sorted by modification time, newest last.
 lt() { ls -ltrh "$@"; }
 # List files sorted by size, smallest first.

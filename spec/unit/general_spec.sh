@@ -21,30 +21,6 @@ Describe 'General Functions'
     End
   End
 
-  Describe 'grep()'
-    setup() {
-      echo "test line" > /tmp/shellspec_grep_test.txt
-    }
-
-    cleanup() {
-      rm -f /tmp/shellspec_grep_test.txt
-    }
-
-    Before 'setup'
-    After 'cleanup'
-
-    It 'wraps grep with color'
-      When call grep "test" /tmp/shellspec_grep_test.txt
-      The status should be success
-      The output should include 'test'
-    End
-
-    It 'returns failure when no match'
-      When call grep "notfound" /tmp/shellspec_grep_test.txt
-      The status should be failure
-    End
-  End
-
   Describe 'count()'
     setup() {
       TEST_DIR=$(mktemp -d)
