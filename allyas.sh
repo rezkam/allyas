@@ -261,11 +261,11 @@ AWK
 # ============================================================================
 
 # Navigate up one directory.
-..() { cd ..; }
+function .. { cd ..; }
 # Navigate up two directories.
-...() { cd ../..; }
+function ... { cd ../..; }
 # Navigate up three directories.
-....() { cd ../../..; }
+function .... { cd ../../..; }
 
 # Grep with color highlighting for matches.
 grep() { command grep --color=auto "$@"; }
