@@ -260,13 +260,6 @@ AWK
 # General Functions
 # ============================================================================
 
-# List files in long format, including hidden files and human-readable sizes.
-ll() { ls -lah "$@"; }
-# List all files, including hidden ones, in a single column.
-la() { ls -A "$@"; }
-# List files in columns, marking directories with a trailing slash.
-l() { ls -CF "$@"; }
-
 # Navigate up one directory.
 ..() { cd ..; }
 # Navigate up two directories.
