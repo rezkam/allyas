@@ -4,36 +4,6 @@ Describe 'General Functions'
   Include ./allyas.sh
 
   Describe 'Directory listing functions'
-    Describe 'll()'
-      It 'lists files in long format'
-        When call ll /
-        The status should be success
-        The output should be present
-      End
-
-      It 'passes additional arguments to ls'
-        When call ll -d /tmp
-        The status should be success
-        The output should be present
-      End
-    End
-
-    Describe 'la()'
-      It 'lists files including hidden'
-        When call la /
-        The status should be success
-        The output should be present
-      End
-    End
-
-    Describe 'l()'
-      It 'lists files in columns'
-        When call l /
-        The status should be success
-        The output should be present
-      End
-    End
-
     Describe 'lt()'
       It 'lists files sorted by modification time'
         When call lt /

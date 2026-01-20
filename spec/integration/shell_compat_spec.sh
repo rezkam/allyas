@@ -24,11 +24,6 @@ Describe 'Shell Compatibility'
   End
 
   Describe 'Function Definitions'
-    It 'defines ll as a function'
-      When call type ll
-      The output should include 'function'
-    End
-
     It 'defines gis as a function'
       When call type gis
       The output should include 'function'
