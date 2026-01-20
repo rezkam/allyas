@@ -21,54 +21,6 @@ Describe 'General Functions'
     End
   End
 
-  Describe 'Navigation functions'
-    # Navigation functions change directory, so we test them by checking PWD
-
-    Describe '..()'
-      setup() {
-        ORIGINAL_DIR=$(pwd)
-        TEST_DIR=$(mktemp -d)
-        mkdir -p "$TEST_DIR/a/b/c"
-        cd "$TEST_DIR/a/b/c"
-      }
-
-      cleanup() {
-        cd "$ORIGINAL_DIR"
-        rm -rf "$TEST_DIR"
-      }
-
-      Before 'setup'
-      After 'cleanup'
-
-      It 'navigates up one directory'
-        ..
-        The value "$PWD" should end with '/a/b'
-      End
-    End
-
-    Describe '...()'
-      setup() {
-        ORIGINAL_DIR=$(pwd)
-        TEST_DIR=$(mktemp -d)
-        mkdir -p "$TEST_DIR/a/b/c"
-        cd "$TEST_DIR/a/b/c"
-      }
-
-      cleanup() {
-        cd "$ORIGINAL_DIR"
-        rm -rf "$TEST_DIR"
-      }
-
-      Before 'setup'
-      After 'cleanup'
-
-      It 'navigates up two directories'
-        ...
-        The value "$PWD" should end with '/a'
-      End
-    End
-  End
-
   Describe 'grep()'
     setup() {
       echo "test line" > /tmp/shellspec_grep_test.txt

@@ -260,13 +260,6 @@ AWK
 # General Functions
 # ============================================================================
 
-# Navigate up one directory.
-function .. { cd ..; }
-# Navigate up two directories.
-function ... { cd ../..; }
-# Navigate up three directories.
-function .... { cd ../../..; }
-
 # Grep with color highlighting for matches.
 grep() { command grep --color=auto "$@"; }
 
